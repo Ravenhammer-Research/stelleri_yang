@@ -1,0 +1,29 @@
+-- Minimal Kyuafile for kyua (Lua).
+-- This Kyuafile is intended to be copied into the build directory by CMake.
+
+-- This is a Kyuafile (a Lua script)
+syntax(2) -- Specifies the syntax version
+
+-- Defines a test suite named 'my_suite'
+test_suite('my_suite')
+
+-- Registers a test program using the ATF interface
+atf_test_program{
+	name = 'TestYang',
+}
+
+atf_test_program{
+	name = 'TestYangContext',
+}
+
+atf_test_program{
+	name = 'TestIetfIp',
+}
+
+atf_test_program{
+	name = 'TestIetfInterfaces',
+}
+
+atf_test_program{
+	name = 'TestIetfRouting',
+}
