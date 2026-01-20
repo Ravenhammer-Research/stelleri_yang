@@ -42,10 +42,8 @@ target_link_libraries(TestYang PRIVATE yang_lib ${LIBYANG_LIBRARIES})
 add_executable(TestYangContext tests/TestYangContext.cpp)
 target_link_libraries(TestYangContext PRIVATE yang_lib ${LIBYANG_LIBRARIES})
 
-# add tests
-add_executable(TestIetfIp tests/TestIetfIp.cpp)
-target_link_libraries(TestIetfIp PRIVATE yang_lib ${LIBYANG_LIBRARIES})
 
+# add tests
 add_executable(TestIetfInterfaces tests/TestIetfInterfaces.cpp)
 target_link_libraries(TestIetfInterfaces PRIVATE yang_lib ${LIBYANG_LIBRARIES})
 
@@ -57,8 +55,7 @@ if(ATF_CPP_FOUND)
 	target_link_libraries(TestYang PRIVATE ${ATF_CPP_LIBRARIES})
 	target_include_directories(TestYangContext PRIVATE ${ATF_CPP_INCLUDE_DIRS})
 	target_link_libraries(TestYangContext PRIVATE ${ATF_CPP_LIBRARIES})
-	target_include_directories(TestIetfIp PRIVATE ${ATF_CPP_INCLUDE_DIRS})
-	target_link_libraries(TestIetfIp PRIVATE ${ATF_CPP_LIBRARIES})
+
 	target_include_directories(TestIetfInterfaces PRIVATE ${ATF_CPP_INCLUDE_DIRS})
 	target_link_libraries(TestIetfInterfaces PRIVATE ${ATF_CPP_LIBRARIES})
 	target_include_directories(TestIetfRouting PRIVATE ${ATF_CPP_INCLUDE_DIRS})
@@ -68,7 +65,6 @@ else()
 endif()
 
 enable_testing()
-add_test(NAME IetfIp COMMAND TestIetfIp)
 add_test(NAME IetfInterfaces COMMAND TestIetfInterfaces)
 add_test(NAME IetfRouting COMMAND TestIetfRouting)
 

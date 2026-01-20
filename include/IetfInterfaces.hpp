@@ -1,7 +1,6 @@
 #pragma once
 
 #include "YangModel.hpp"
-#include "IetfIp.hpp"
 #include "IetfYangTypes.hpp"
 #include "IanaIfType.hpp"
 
@@ -38,6 +37,18 @@ public:
         std::optional<yang::counter64> out_multicast_pkts;
         std::optional<yang::counter32> out_discards;
         std::optional<yang::counter32> out_errors;
+    };
+
+    // Minimal structs representing the `ietf-ip` augmentation
+    // that used to live in `IetfIp.hpp`. These are intentionally
+    // lightweight placeholders so the interfaces module can
+    // refer to `ipv4`/`ipv6` containers without the separate file.
+    struct IetfIpv4 {
+        std::vector<std::string> address;
+    };
+
+    struct IetfIpv6 {
+        std::vector<std::string> address;
     };
 
     struct IetfInterface {
