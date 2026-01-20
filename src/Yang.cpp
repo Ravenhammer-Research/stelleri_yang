@@ -24,7 +24,8 @@ std::shared_ptr<YangContext> Yang::getContext(std::initializer_list<YangContextO
 
 std::shared_ptr<YangContext> Yang::getDefaultContext() {
     static bool initialized = false;
-    auto instance = getContext({});
+    // Create a context that does not auto-initialize ietf-yang-library
+    auto instance = getContext({YangContextOption::NoYanglibrary});
     if (!instance) throw std::runtime_error("failed to create YangContext");
     if (initialized) return instance;
 

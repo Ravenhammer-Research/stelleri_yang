@@ -5,25 +5,26 @@
 syntax(2) -- Specifies the syntax version
 
 -- Defines a test suite named 'my_suite'
-test_suite('my_suite')
+test_suite("my_suite")
 
 -- Registers a test program using the ATF interface
-atf_test_program{
-	name = 'TestYang',
+atf_test_program {
+	name = "TestYang",
 }
 
-atf_test_program{
-	name = 'TestYangContext',
+atf_test_program {
+	name = "TestYangContext",
 }
 
-atf_test_program{
-	name = 'TestIetfIp',
+atf_test_program {
+	name = "TestIetfIp",
 }
 
-atf_test_program{
-	name = 'TestIetfInterfaces',
+atf_test_program {
+	name = "TestIetfInterfaces",
 }
 
-atf_test_program{
-	name = 'TestIetfRouting',
+atf_test_program {
+	name = "TestIetfRouting",
 }
+

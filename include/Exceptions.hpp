@@ -50,7 +50,7 @@ protected:
 class YangDataError : public YangError {
 public:
 
-    explicit YangDataError(const YangContext& ctx) {
+    explicit YangDataError(const YangContext& ctx) : ctx_(&ctx) {
         error_ = captureError(&ctx);
     }
 
@@ -70,9 +70,22 @@ public:
             if (!err.empty()) ss << err;
             if (!dpath.empty()) ss << "\nData path: " << dpath;
             if (!spath.empty()) ss << "\nSchema path: " << spath;
-            if (line >= 0) ss << "\nLine: " << line;
+            if (line >= 0) ss << "\nLine: " << std::to_string(line);
             if (!apptag.empty()) ss << "\nApp tag: " << apptag;
             if (!expr.empty()) ss << "\nExpr: " << expr;
+
+            // Append loaded modules from the context (if available)
+            if (ctx_ && ctx_->raw()) {
+                ss << "\nXXX this might be problematic: Loaded modules:";
+                uint32_t idx = 0;
+                const struct lys_module *m = nullptr;
+                while ((m = ly_ctx_get_module_iter(ctx_->raw(), &idx)) != NULL) {
+                    if (m->name) {
+                        ss << "\n - " << m->name;
+                    }
+                    ++idx;
+                }
+            }
 
             what_buf_ = ss.str();
         }
@@ -109,6 +122,13 @@ private:
 
     YangDataError(const YangDataError&) = default;
     YangDataError& operator=(const YangDataError&) = default;
+    const YangContext* ctx_ = nullptr;
+};
+
+// Exception thrown when module iterator cannot continue (no more modules).
+class ModuleIteratorStopError : public std::runtime_error {
+public:
+    ModuleIteratorStopError() : std::runtime_error(nullptr) {}
 };
 
 } // namespace yang

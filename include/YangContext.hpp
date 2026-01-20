@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <libyang/libyang.h>
+#include "YangSchemaModule.hpp"
 
 namespace yang {
 // Map libyang context flags (LY_CTX_*) to a scoped enum for callers.
@@ -98,6 +99,32 @@ public:
     const std::vector<std::string>& searchPaths() const noexcept { return search_paths_; }
 
     struct ly_ctx* raw() const noexcept { return ctx_; }
+
+    // Iterator class to walk loaded modules in the libyang context.
+    class ModuleIterator {
+    public:
+        // Construct an iterator starting at the given module. `start` may be
+        // nullptr to create an empty iterator. The iterator advances using the
+        // module linked-list (module->next).
+        explicit ModuleIterator(const struct lys_module* start);
+        // Return next module wrapped in YangSchemaModule; throws
+        // ModuleIteratorStopError if iteration is exhausted.
+        YangSchemaModule next() const;
+        // Return true if calling next() would return a non-empty YangSchemaModule
+        // without modifying iterator state.
+        YangSchemaModule current() const;
+        bool hasNext() const noexcept;
+    private:
+        const struct lys_module* current_ = nullptr;
+        uint32_t current_idx_ = 0;
+
+    };
+
+    // Return a module iterator starting at the beginning of the loaded modules.
+    ModuleIterator GetModuleIterator() const;
+
+    // Find a loaded module by name; returns an empty YangSchemaModule if not found.
+    YangSchemaModule GetLoadedModuleByName(const std::string& name) const noexcept;
 
 private:
     struct ly_ctx* ctx_ = nullptr;

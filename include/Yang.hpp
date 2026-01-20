@@ -14,7 +14,7 @@ class YangContext;
 
 class Yang {
 public:
-    // Accept a variable-length list of YangContextOption values (default empty)
+    //Accept a variable-length list of YangContextOption values (default empty)
     static std::shared_ptr<YangContext> getContext(std::initializer_list<YangContextOption> opts = {});
 
     // Return a fully-initialized default context: adds standard search paths
@@ -31,11 +31,12 @@ inline const std::vector<std::tuple<std::string,std::string,const char**>> kDefa
     // {"ietf-yang-schema-mount","2019-01-14", nullptr},
     // {"ietf-datastores","2018-02-14", nullptr},
     // {"ietf-yang-structure-ext","2020-06-17", nullptr},
-    {"ietf-inet-types","2013-07-15", nullptr},
-    {"ietf-yang-types","2013-07-15", nullptr},
-    {"ietf-yang-library","2019-01-04", nullptr},
-    {"yang","2025-01-29", nullptr},
-    {"ietf-yang-metadata","2016-08-05", nullptr},
+    // {"ietf-inet-types","2013-07-15", nullptr},
+    // {"ietf-yang-types","2013-07-15", nullptr},
+    // XXX shouldnt even load this I dont think.... Omit loading ietf-yang-library by default; tests provide any required yang-library
+    // {"ietf-yang-library","2019-01-04", nullptr},
+    // {"yang","2025-01-29", nullptr},
+    // {"ietf-yang-metadata","2016-08-05", nullptr},
     // {"iana-bfd-types","2021-10-21", nullptr},
     // {"iana-bgp-l2-encaps","2022-09-20", nullptr},
     // {"iana-crypt-hash","2014-08-06", nullptr},
@@ -52,7 +53,7 @@ inline const std::vector<std::tuple<std::string,std::string,const char**>> kDefa
     // {"iana-dots-signal-channel","2021-09-02", nullptr },
     // {"iana-hardware","2018-03-13", nullptr },
     // {"iana-if-type","2021-06-21", nullptr },
-    {"iana-if-type","2023-01-26", nullptr },
+    // {"iana-if-type","2023-01-26", nullptr },
     // {"iana-msd-types","2025-01-10", nullptr },
     // {"iana-pseudowire-types","2022-09-20", nullptr },
     // {"iana-routing-types","2025-02-18", nullptr },
@@ -110,11 +111,11 @@ inline const std::vector<std::tuple<std::string,std::string,const char**>> kDefa
     // {"ietf-igmp-mld","2019-11-01", nullptr},
     // {"ietf-igmp-mld-proxy","2023-05-30", nullptr},
     // {"ietf-igmp-mld-snooping","2022-01-31", nullptr},
-    {"ietf-inet-types","2013-07-15", nullptr},
+    // {"ietf-inet-types","2013-07-15", nullptr},
     // {"ietf-interface-protection","2019-06-19", nullptr},
-    {"ietf-interfaces","2018-02-20", nullptr},
+    // {"ietf-interfaces","2018-02-20", nullptr},
     // {"ietf-ioam","2024-08-27", nullptr},
-    {"ietf-ip","2018-02-22", nullptr},
+    // {"ietf-ip","2018-02-22", nullptr},
     // {"ietf-ipfix-psamp","2017-01-18", nullptr},
     // {"ietf-ipsec-iptfs","2023-01-31", nullptr},
     // {"ietf-ipv4-unicast-routing","2018-03-13", nullptr},
@@ -176,7 +177,7 @@ inline const std::vector<std::tuple<std::string,std::string,const char**>> kDefa
     // {"ietf-rib-extension","2023-11-20", nullptr},
     // {"ietf-rift","2025-04-04", nullptr},
     // {"ietf-rip","2020-02-20", nullptr},
-    {"ietf-routing","2018-03-13", nullptr},
+    // {"ietf-routing","2018-03-13", nullptr},
     // {"ietf-routing-policy","2021-10-11", nullptr},
     // {"ietf-routing-types","2017-12-04", nullptr},
     // {"ietf-sap-ntw","2023-06-20", nullptr},
@@ -251,4 +252,4 @@ inline const std::vector<std::string> kDefaultSearchPaths = {
     "/usr/share/yang/modules/yang/standard/ietf/RFC/"
 };
 
-} // namespace yang
+} //namespace yang

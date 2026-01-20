@@ -3,6 +3,7 @@
 #include "YangContext.hpp"
 #include "Yang.hpp"
 #include "IetfInterfaces.hpp"
+#include "YangModel.hpp"
 
 using namespace yang;
 
@@ -31,8 +32,8 @@ ATF_TEST_CASE_BODY(ietf_interfaces_roundtrip) {
 </ietf-interfaces:interfaces>)";
 
         struct lyd_node *tree = nullptr;
-        LY_ERR rc = lyd_parse_data_mem(ctx->raw(), xml.c_str(), LYD_XML, 0, 0, &tree);
-        ATF_REQUIRE(rc == LY_SUCCESS && tree != nullptr);
+        tree = YangModel::parseXml(*ctx, xml);
+        ATF_REQUIRE(tree != nullptr);
 
         std::unique_ptr<IetfInterfaces> parsed = IetfInterfaces::deserialize(*ctx, tree);
         ATF_REQUIRE(parsed != nullptr);

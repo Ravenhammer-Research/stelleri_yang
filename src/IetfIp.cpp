@@ -9,19 +9,9 @@ static char bool_to_str(bool v) { return v ? '1' : '0'; }
 struct lyd_node* IetfIpv4::serialize(const YangContext &ctx) const {
 	struct ly_ctx *c = ctx.raw();
 
-	// create a temporary interface parent under /ietf-interfaces:interfaces
-	struct lyd_node *top = nullptr;
-	LY_ERR err = lyd_new_path(nullptr, c, "/ietf-interfaces:interfaces", NULL, 0, &top);
-	if (err != LY_SUCCESS || !top) throw YangDataError(ctx);
-
-	struct lyd_node *ifnode = nullptr;
-	// create an interface list entry with a dummy name so the augment target exists
-	err = lyd_new_path(top, c, "interface[name='__tmp_if__']", NULL, 0, &ifnode);
-	if (err != LY_SUCCESS || !ifnode) throw YangDataError(ctx);
-
-	// now create the ipv4 container as a child of the interface
+	// Create the ipv4 container as a top-level node: /ietf-ip:ipv4
 	struct lyd_node *root = nullptr;
-	err = lyd_new_path(ifnode, c, "ietf-ip:ipv4", NULL, 0, &root);
+	LY_ERR err = lyd_new_path(nullptr, c, "/ietf-ip:ipv4", NULL, 0, &root);
 	if (err != LY_SUCCESS || !root) throw YangDataError(ctx);
 
 	// enabled

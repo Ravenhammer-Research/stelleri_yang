@@ -1,6 +1,8 @@
 #pragma once
 
 #include "YangContext.hpp"
+#include "Exceptions.hpp"
+#include <libyang/libyang.h>
 #include <libyang/tree_data.h>
 #include <memory>
 #include <stdexcept>
@@ -29,6 +31,18 @@ public:
     static std::unique_ptr<YangModel> deserialize(const YangContext &/*ctx*/, struct lyd_node* /*tree*/)
     {
         throw std::logic_error("deserialize not implemented for base YangModel");
+    }
+
+    // Convenience helper: parse an XML fragment into a libyang data tree using
+    // the provided `YangContext`. On success returns the created `lyd_node*`.
+    // On failure throws `YangDataError` constructed with `ctx`.
+    static struct lyd_node* parseXml(const YangContext &ctx, const std::string &xml, uint32_t parse_flags = 0) {
+        struct lyd_node *tree = nullptr;
+        LY_ERR rc = lyd_parse_data_mem(ctx.raw(), xml.c_str(), LYD_XML, 0, parse_flags, &tree);
+        if (rc != LY_SUCCESS || tree == nullptr) {
+            throw YangDataError(ctx);
+        }
+        return tree;
     }
 };
 
