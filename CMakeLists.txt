@@ -50,6 +50,10 @@ target_link_libraries(TestIetfInterfaces PRIVATE yang_lib ${LIBYANG_LIBRARIES})
 add_executable(TestIetfRouting tests/TestIetfRouting.cpp)
 target_link_libraries(TestIetfRouting PRIVATE yang_lib ${LIBYANG_LIBRARIES})
 
+# Add IETF network-instance test (use existing TestIetfNetworkInstance.cpp)
+add_executable(TestIetfNetworkInstance tests/TestIetfNetworkInstance.cpp)
+target_link_libraries(TestIetfNetworkInstance PRIVATE yang_lib ${LIBYANG_LIBRARIES})
+
 if(ATF_CPP_FOUND)
 	target_include_directories(TestYang PRIVATE ${ATF_CPP_INCLUDE_DIRS})
 	target_link_libraries(TestYang PRIVATE ${ATF_CPP_LIBRARIES})
@@ -60,6 +64,10 @@ if(ATF_CPP_FOUND)
 	target_link_libraries(TestIetfInterfaces PRIVATE ${ATF_CPP_LIBRARIES})
 	target_include_directories(TestIetfRouting PRIVATE ${ATF_CPP_INCLUDE_DIRS})
 	target_link_libraries(TestIetfRouting PRIVATE ${ATF_CPP_LIBRARIES})
+
+	# ATF settings for network-instance test
+	target_include_directories(TestIetfNetworkInstance PRIVATE ${ATF_CPP_INCLUDE_DIRS})
+	target_link_libraries(TestIetfNetworkInstance PRIVATE ${ATF_CPP_LIBRARIES})
 else()
 	message(WARNING "libatf-c++-2 not found via pkg-config; tests will still build but won't include ATF headers")
 endif()
@@ -67,6 +75,7 @@ endif()
 enable_testing()
 add_test(NAME IetfInterfaces COMMAND TestIetfInterfaces)
 add_test(NAME IetfRouting COMMAND TestIetfRouting)
+add_test(NAME IetfNetworkInstance COMMAND TestIetfNetworkInstance)
 
 # Copy Kyuafile from tests/ into the build directory so kyua can find it next
 # to the built test executables. This runs at configure time.

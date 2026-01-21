@@ -1,6 +1,5 @@
 #include "YangContext.hpp"
 #include "Exceptions.hpp"
-#include "YangSchemaModule.hpp"
 
 #include <libyang/libyang.h>
 
@@ -41,17 +40,14 @@ struct lys_module *YangContext::loadModuleInContext(const std::string &name,
   return mod;
 }
 
-YangSchemaModule
-YangContext::GetLoadedModuleByName(const std::string &name) const {
+const struct lys_module *YangContext::GetLoadedModuleByName(const std::string &name) const {
   if (!ctx_)
-    return YangSchemaModule(nullptr);
+    return nullptr;
   uint32_t idx = 0;
   const struct lys_module *m = nullptr;
   while ((m = ly_ctx_get_module_iter(ctx_, &idx)) != nullptr) {
-    YangSchemaModule mod(m);
-    const char *n = mod.name();
-    if (n && name == n)
-      return mod;
+    if (m->name && name == m->name)
+      return m;
   }
-  return YangSchemaModule(nullptr);
+  return nullptr;
 }

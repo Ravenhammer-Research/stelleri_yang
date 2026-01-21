@@ -24,3 +24,6 @@ atf_test_program {
 	name = "TestIetfRouting",
 }
 
+atf_test_program {
+	name = "TestIetfNetworkInstance",
+}

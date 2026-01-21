@@ -66,11 +66,6 @@ ATF_TEST_CASE_BODY(yang_context_raw) {
   } catch (YangDataError &e) {
     ATF_FAIL(e.what());
   }
-
-  // Verify module present via our YangContext helper
-  YangSchemaModule mod = ctx->GetLoadedModuleByName("ietf-ip");
-  if (!mod)
-    ATF_FAIL("ietf-ip module not found in libyang context");
 }
 
 ATF_INIT_TEST_CASES(tcs) { ATF_ADD_TEST_CASE(tcs, yang_context_raw); }

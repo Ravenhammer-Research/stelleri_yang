@@ -1,6 +1,5 @@
 #pragma once
 
-#include "YangSchemaModule.hpp"
 #include <libyang/libyang.h>
 #include <string>
 #include <vector>
@@ -109,12 +108,8 @@ namespace yang {
 
     struct ly_ctx *raw() const noexcept { return ctx_; }
 
-    // (Removed) ModuleIterator helper - iteration is done directly via
-    // libyang APIs in source to keep the header minimal.
-
-    // Find a loaded module by name; returns an empty YangSchemaModule if not
-    // found.
-    YangSchemaModule GetLoadedModuleByName(const std::string &name) const;
+    // Find a loaded module by name; returns nullptr if not found.
+    const struct lys_module *GetLoadedModuleByName(const std::string &name) const;
 
   private:
     struct ly_ctx *ctx_ = nullptr;

@@ -157,7 +157,7 @@ namespace yang {
           // {"ietf-mud-tls","2025-04-18", nullptr},
           // {"ietf-mud-transparency","2023-10-10", nullptr},
           // {"ietf-network","2018-02-26", nullptr},
-          // {"ietf-network-instance","2019-01-21", nullptr},
+          {"ietf-network-instance","2019-01-21", nullptr},
           // {"ietf-network-state","2018-02-26", nullptr},
           // {"ietf-network-topology","2018-02-26", nullptr},
           // {"ietf-network-topology-state","2018-02-26", nullptr},

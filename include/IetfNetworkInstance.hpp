@@ -1,0 +1,67 @@
+#pragma once
+
+#include "YangModel.hpp"
+#include "IetfRouting.hpp"
+#include "IetfInterfaces.hpp"
+#include <libyang/libyang.h>
+
+#include <string>
+#include <vector>
+#include <optional>
+#include <memory>
+
+namespace yang {
+
+class IetfNetworkInstances : public YangModel {
+public:
+  class NetworkInstance {
+  public:
+    NetworkInstance() = default;
+    ~NetworkInstance() = default;
+
+    // non-copyable, movable to allow storing in std::vector via move
+    NetworkInstance(const NetworkInstance&) = delete;
+    NetworkInstance& operator=(const NetworkInstance&) = delete;
+    NetworkInstance(NetworkInstance&&) noexcept = default;
+    NetworkInstance& operator=(NetworkInstance&&) noexcept = default;
+
+    const std::string &getName() const noexcept { return name_; }
+    void setName(const std::string &n) { name_ = n; }
+
+    bool getEnabled() const noexcept { return enabled_; }
+    void setEnabled(bool e) { enabled_ = e; }
+
+    const std::optional<std::string> &getDescription() const noexcept { return description_; }
+    void setDescription(const std::optional<std::string> &d) { description_ = d; }
+
+    // routing / interfaces submodels parsed from mount points
+    const IetfRouting *getRouting() const noexcept { return routing_.get(); }
+    void setRouting(std::unique_ptr<IetfRouting> r) { routing_ = std::move(r); }
+
+    const IetfInterfaces *getInterfaces() const noexcept { return interfaces_.get(); }
+    void setInterfaces(std::unique_ptr<IetfInterfaces> i) { interfaces_ = std::move(i); }
+
+  private:
+    std::string name_;
+    bool enabled_ = true;
+    std::optional<std::string> description_;
+
+    std::unique_ptr<IetfRouting> routing_;
+    std::unique_ptr<IetfInterfaces> interfaces_;
+  };
+
+  IetfNetworkInstances() = default;
+  ~IetfNetworkInstances() override = default;
+
+  const std::vector<NetworkInstance> &getNetworkInstances() const noexcept { return instances_; }
+  std::vector<NetworkInstance> &mutableNetworkInstances() noexcept { return instances_; }
+
+  // YangModel interface
+  struct lyd_node *serialize(const YangContext &ctx) const override;
+  static std::unique_ptr<IetfNetworkInstances> deserialize(const YangContext &ctx, struct lyd_node *tree);
+
+private:
+  std::vector<NetworkInstance> instances_;
+};
+
+} // namespace yang
