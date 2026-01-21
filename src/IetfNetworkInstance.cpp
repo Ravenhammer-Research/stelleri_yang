@@ -160,13 +160,13 @@ LY_ERR IetfNetworkInstances::extDataCallback(const struct lysc_ext_instance *ext
   // - How the mount point is configured (schema-mounts with shared-schema)
   
   if (!ext_data || !free_ext_data)
-    return LY_EINVAL;
+    throw YangError();
 
   *ext_data = nullptr;
   *free_ext_data = 0;
 
   if (!node)
-    return LY_SUCCESS;
+    throw YangError();
 
   struct ly_ctx *ctx = (struct ly_ctx *)LYD_CTX(node);
 
@@ -174,7 +174,7 @@ LY_ERR IetfNetworkInstances::extDataCallback(const struct lysc_ext_instance *ext
   if (node->schema && node->schema->name)
     label_name = node->schema->name;
   if (!label_name)
-    return LY_EINVAL;
+    throw YangError();
 
   // Build ext-data XML with BOTH modern yang-library AND deprecated modules-state (with module-set-id)
   // This provides metadata about the mounted schema (ietf-routing, ietf-interfaces) and
@@ -213,12 +213,12 @@ LY_ERR IetfNetworkInstances::extDataCallback(const struct lysc_ext_instance *ext
   if (lyd_parse_data_mem(ctx, ext_xml.c_str(), LYD_XML, 0, 0, &parsed) != LY_SUCCESS) {
     if (parsed)
       lyd_free_all(parsed);
-    return LY_EINVAL;
+    throw YangError();
   }
 
   if (lyd_validate_all(&parsed, nullptr, LYD_VALIDATE_PRESENT, nullptr) != LY_SUCCESS) {
     lyd_free_all(parsed);
-    return LY_EVALID;
+    throw YangError();
   }
 
   *ext_data = parsed;
