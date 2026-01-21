@@ -1,8 +1,8 @@
 #pragma once
 
+#include "IetfInterfaces.hpp"
 #include "IetfYangTypes.hpp"
 #include "YangModel.hpp"
-#include "IetfInterfaces.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -97,8 +97,8 @@ namespace yang {
     // Returns parsed interface objects (if the input provided a
     // top-level /ietf-interfaces:interfaces container). This is empty if
     // no interface data was provided.
-    const std::vector<IetfInterfaces::IetfInterface> &getInterfacesInfo()
-        const noexcept {
+    const std::vector<IetfInterfaces::IetfInterface> &
+    getInterfacesInfo() const noexcept {
       return routing_.interfaces_info;
     }
 

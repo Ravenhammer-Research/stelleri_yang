@@ -1,7 +1,7 @@
 #include "IetfRouting.hpp"
 #include "Exceptions.hpp"
-#include <libyang/libyang.h>
 #include "IetfInterfaces.hpp"
+#include <libyang/libyang.h>
 
 using namespace yang;
 
@@ -14,34 +14,45 @@ struct lyd_node *IetfRouting::serialize(const YangContext &ctx) const {
   struct ly_ctx *c = ctx.raw();
 
   struct lyd_node *root = nullptr;
-  check_ly_err(ctx, lyd_new_path(nullptr, c, "/ietf-routing:routing", NULL, 0, &root));
+  check_ly_err(
+      ctx, lyd_new_path(nullptr, c, "/ietf-routing:routing", NULL, 0, &root));
 
   // router-id
   if (routing_.router_id.has_value()) {
     struct lyd_node *tmp = nullptr;
-    check_ly_err(ctx, lyd_new_path(root, c, "router-id", routing_.router_id->c_str(), 0, &tmp));
+    check_ly_err(ctx, lyd_new_path(root, c, "router-id",
+                                   routing_.router_id->c_str(), 0, &tmp));
   }
 
   // interfaces leaf-list
   for (const auto &ifname : routing_.interfaces) {
     struct lyd_node *tmp = nullptr;
-    check_ly_err(ctx, lyd_new_path(root, c, "interfaces/interface", ifname.c_str(), 0, &tmp));
+    check_ly_err(ctx, lyd_new_path(root, c, "interfaces/interface",
+                                   ifname.c_str(), 0, &tmp));
   }
 
   // control-plane-protocol entries (type + name + description)
   for (const auto &cpp : routing_.control_plane_protocols) {
-    std::string pred = "control-plane-protocols/control-plane-protocol[type='" + cpp.type + "'][name='" + cpp.name + "']";
+    std::string pred = "control-plane-protocols/control-plane-protocol[type='" +
+                       cpp.type + "'][name='" + cpp.name + "']";
     struct lyd_node *tmp = nullptr;
-    check_ly_err(ctx, lyd_new_path(root, c, (pred + "/type").c_str(), cpp.type.c_str(), 0, &tmp));
-    check_ly_err(ctx, lyd_new_path(root, c, (pred + "/name").c_str(), cpp.name.c_str(), 0, &tmp));
+    check_ly_err(ctx, lyd_new_path(root, c, (pred + "/type").c_str(),
+                                   cpp.type.c_str(), 0, &tmp));
+    check_ly_err(ctx, lyd_new_path(root, c, (pred + "/name").c_str(),
+                                   cpp.name.c_str(), 0, &tmp));
     if (cpp.description.has_value())
-      check_ly_err(ctx, lyd_new_path(root, c, (pred + "/description").c_str(), cpp.description->c_str(), 0, &tmp));
+      check_ly_err(ctx, lyd_new_path(root, c, (pred + "/description").c_str(),
+                                     cpp.description->c_str(), 0, &tmp));
 
     // static-routes: create minimal entries
     for (const auto &r : cpp.static_routes) {
       if (r.route_preference.has_value()) {
         struct lyd_node *tmp2 = nullptr;
-        check_ly_err(ctx, lyd_new_path(root, c, (pred + "/static-routes/route/route-preference").c_str(), std::to_string(*r.route_preference).c_str(), 0, &tmp2));
+        check_ly_err(
+            ctx, lyd_new_path(
+                     root, c,
+                     (pred + "/static-routes/route/route-preference").c_str(),
+                     std::to_string(*r.route_preference).c_str(), 0, &tmp2));
       }
     }
   }
@@ -50,14 +61,20 @@ struct lyd_node *IetfRouting::serialize(const YangContext &ctx) const {
   for (const auto &rib : routing_.ribs) {
     std::string pred = "ribs/rib[name='" + rib.name + "']";
     struct lyd_node *tmp = nullptr;
-    check_ly_err(ctx, lyd_new_path(root, c, (pred + "/name").c_str(), rib.name.c_str(), 0, &tmp));
-    check_ly_err(ctx, lyd_new_path(root, c, (pred + "/address-family").c_str(), rib.address_family.c_str(), 0, &tmp));
+    check_ly_err(ctx, lyd_new_path(root, c, (pred + "/name").c_str(),
+                                   rib.name.c_str(), 0, &tmp));
+    check_ly_err(ctx, lyd_new_path(root, c, (pred + "/address-family").c_str(),
+                                   rib.address_family.c_str(), 0, &tmp));
     if (rib.description.has_value())
-      check_ly_err(ctx, lyd_new_path(root, c, (pred + "/description").c_str(), rib.description->c_str(), 0, &tmp));
+      check_ly_err(ctx, lyd_new_path(root, c, (pred + "/description").c_str(),
+                                     rib.description->c_str(), 0, &tmp));
     for (const auto &r : rib.routes) {
       if (r.route_preference.has_value()) {
         struct lyd_node *tmp2 = nullptr;
-        check_ly_err(ctx, lyd_new_path(root, c, (pred + "/routes/route/route-preference").c_str(), std::to_string(*r.route_preference).c_str(), 0, &tmp2));
+        check_ly_err(
+            ctx, lyd_new_path(
+                     root, c, (pred + "/routes/route/route-preference").c_str(),
+                     std::to_string(*r.route_preference).c_str(), 0, &tmp2));
       }
     }
   }
@@ -65,7 +82,8 @@ struct lyd_node *IetfRouting::serialize(const YangContext &ctx) const {
   return root;
 }
 
-static struct lyd_node *find_child_by_name(struct lyd_node *parent, const char *name) {
+static struct lyd_node *find_child_by_name(struct lyd_node *parent,
+                                           const char *name) {
   if (!parent)
     return nullptr;
   for (struct lyd_node *c = lyd_child(parent); c; c = c->next) {
@@ -81,7 +99,8 @@ static const char *get_node_value(struct lyd_node *n) {
   return lyd_get_value(n);
 }
 
-std::unique_ptr<IetfRouting> IetfRouting::deserialize(const YangContext &ctx, struct lyd_node *tree) {
+std::unique_ptr<IetfRouting> IetfRouting::deserialize(const YangContext &ctx,
+                                                      struct lyd_node *tree) {
   if (!tree)
     throw YangDataError(ctx);
 
@@ -92,7 +111,9 @@ std::unique_ptr<IetfRouting> IetfRouting::deserialize(const YangContext &ctx, st
   // 1) If a top-level /ietf-interfaces:interfaces exists, parse it first
   //    so the routing model can obtain full interface objects up-front.
   struct lyd_node *ifs_tree = nullptr;
-  if (lyd_find_path(tree, "/ietf-interfaces:interfaces", 0, &ifs_tree) == LY_SUCCESS && ifs_tree != nullptr) {
+  if (lyd_find_path(tree, "/ietf-interfaces:interfaces", 0, &ifs_tree) ==
+          LY_SUCCESS &&
+      ifs_tree != nullptr) {
     auto ifs_model = IetfInterfaces::deserialize(ctx, ifs_tree);
     if (ifs_model) {
       for (const auto &iface : ifs_model->getInterfaces()) {
@@ -104,7 +125,8 @@ std::unique_ptr<IetfRouting> IetfRouting::deserialize(const YangContext &ctx, st
 
   // 2) Find the routing node (either the tree itself or a child)
   struct lyd_node *rt = nullptr;
-  if (tree->schema && tree->schema->name && strcmp(tree->schema->name, "routing") == 0) {
+  if (tree->schema && tree->schema->name &&
+      strcmp(tree->schema->name, "routing") == 0) {
     rt = tree;
   } else {
     if (lyd_find_path(tree, "/ietf-routing:routing", 0, &rt) != LY_SUCCESS)
@@ -130,7 +152,10 @@ std::unique_ptr<IetfRouting> IetfRouting::deserialize(const YangContext &ctx, st
         if (val) {
           bool found = false;
           for (const auto &n : model->mutableRouting().interfaces) {
-            if (n == val) { found = true; break; }
+            if (n == val) {
+              found = true;
+              break;
+            }
           }
           if (!found)
             model->mutableRouting().interfaces.push_back(std::string(val));

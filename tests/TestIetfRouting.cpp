@@ -3,9 +3,9 @@
 #include "YangContext.hpp"
 #include "YangModel.hpp"
 #include <atf-c++.hpp>
-#include <memory>
 #include <cstdio>
 #include <libyang/log.h>
+#include <memory>
 
 using namespace yang;
 
