@@ -4,6 +4,7 @@
 #include "IetfRouting.hpp"
 #include <cstring>
 #include <libyang/libyang.h>
+#include <cstdlib>
 
 using namespace yang;
 
@@ -145,26 +146,82 @@ IetfNetworkInstances::deserialize(const YangContext &ctx,
   return model;
 }
 
-// Minimal ext-data callback: return the supplied user_data as the opaque
-// handle. Libyang will call this when encountering the schema-mount extension
-// instance. Adjust implementation if your schema-mount plugin expects a
-// different handle.
-void *IetfNetworkInstances::extDataCallback(const struct lys_ext_instance *ext,
-                                            void *user_data) {
-  (void)ext; // unused in this minimal implementation
-  return user_data;
-}
+LY_ERR IetfNetworkInstances::extDataCallback(const struct lysc_ext_instance *ext,
+                                              [[maybe_unused]] const struct lyd_node *node,
+                                              [[maybe_unused]] void *user_data,
+                                              void **ext_data,
+                                              ly_bool *free_ext_data) {
+  // This callback provides mount-point metadata (yang-library + schema-mounts) to libyang
+  // when it encounters a mount point (vrf-root/vsi-root/vv-root) during validation/parsing.
+  // 
+  // The instance data contains ONLY the mounted data (e.g., routing config).
+  // This callback returns SEPARATE yang-library and schema-mounts trees that describe:
+  // - Which modules are available in the mounted schema (yang-library)
+  // - How the mount point is configured (schema-mounts with shared-schema)
+  
+  if (!ext_data || !free_ext_data)
+    return LY_EINVAL;
 
-// libyang ext-data callback: supply opaque handle for schema-mount extension.
-// Minimal implementation: return the provided user_data as the ext-data handle.
-LY_ERR IetfNetworkInstances::extDataCallback(
-    const struct lysc_ext_instance *ext, const struct lyd_node *node,
-    void *user_data, void **ext_data, ly_bool *need_free) {
-  (void)ext;
-  (void)node;
-  if (ext_data)
-    *ext_data = user_data;
-  if (need_free)
-    *need_free = 0; /* caller should not free the handle */
+  *ext_data = nullptr;
+  *free_ext_data = 0;
+
+  if (!node)
+    return LY_SUCCESS;
+
+  struct ly_ctx *ctx = (struct ly_ctx *)LYD_CTX(node);
+
+  const char *label_name = nullptr;
+  if (node->schema && node->schema->name)
+    label_name = node->schema->name;
+  if (!label_name)
+    return LY_EINVAL;
+
+  // Build ext-data XML with BOTH modern yang-library AND deprecated modules-state (with module-set-id)
+  // This provides metadata about the mounted schema (ietf-routing, ietf-interfaces) and
+  // tells libyang to use shared-schema (parent context) for resolution
+  std::string ext_xml = std::string(
+    R"(<?xml version="1.0"?>)"
+    R"(<yang-library xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-library">)"
+    R"(<content-id>1</content-id>)"
+    R"(<module-set><name>vrf-modules</name>)"
+    R"(<module>)"
+    R"(<name>ietf-routing</name>)"
+    R"(<revision>2018-03-13</revision>)"
+    R"(<namespace>urn:ietf:params:xml:ns:yang:ietf-routing</namespace>)"
+    R"(</module>)"
+    R"(<module>)"
+    R"(<name>ietf-interfaces</name>)"
+    R"(<revision>2018-02-20</revision>)"
+    R"(<namespace>urn:ietf:params:xml:ns:yang:ietf-interfaces</namespace>)"
+    R"(</module>)"
+    R"(</module-set>)"
+    R"(<schema><name>vrf-schema</name><module-set>vrf-modules</module-set></schema>)"
+    R"(</yang-library>)"
+    R"(<modules-state xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-library">)"
+    R"(<module-set-id>1</module-set-id>)"
+    R"(</modules-state>)"
+    R"(<schema-mounts xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-schema-mount">)"
+    R"(<mount-point>)"
+    R"(<module>ietf-network-instance</module>)"
+    R"(<label>)" + std::string(label_name) + R"(</label>)"
+    R"(<shared-schema/>)"
+    R"(</mount-point>)"
+    R"(</schema-mounts>)"
+  );
+
+  struct lyd_node *parsed = nullptr;
+  if (lyd_parse_data_mem(ctx, ext_xml.c_str(), LYD_XML, 0, 0, &parsed) != LY_SUCCESS) {
+    if (parsed)
+      lyd_free_all(parsed);
+    return LY_EINVAL;
+  }
+
+  if (lyd_validate_all(&parsed, nullptr, LYD_VALIDATE_PRESENT, nullptr) != LY_SUCCESS) {
+    lyd_free_all(parsed);
+    return LY_EVALID;
+  }
+
+  *ext_data = parsed;
+  *free_ext_data = 1;
   return LY_SUCCESS;
 }

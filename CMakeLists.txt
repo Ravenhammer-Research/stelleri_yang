@@ -81,3 +81,18 @@ add_test(NAME IetfNetworkInstance COMMAND TestIetfNetworkInstance)
 # to the built test executables. This runs at configure time.
 configure_file(${CMAKE_SOURCE_DIR}/tests/Kyuafile ${CMAKE_BINARY_DIR}/Kyuafile COPYONLY)
 
+# Ensure a default build type
+if(NOT CMAKE_BUILD_TYPE)
+	set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
+endif()
+
+# Always enable debug flags for C and C++ (unconditional)
+set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -g -O0 -fno-omit-frame-pointer")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0 -fno-omit-frame-pointer")
+add_compile_options(-g -O0 -fno-omit-frame-pointer)
+
+# Ensure executables export symbols for backtrace resolution and avoid stripping
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -rdynamic")
+string(REPLACE "-s" "" CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+string(REPLACE "-s" "" CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
+

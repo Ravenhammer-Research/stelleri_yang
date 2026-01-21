@@ -29,18 +29,15 @@ namespace yang {
   // Now includes a third parameter (features pointer) currently set to nullptr.
   inline const std::vector<std::tuple<std::string, std::string, const char **>>
       kDefaultModules = {
-          // {"default","2025-06-18", nullptr},
-          // {"ietf-yang-schema-mount","2019-01-14", nullptr},
-          // {"ietf-datastores","2018-02-14", nullptr},
-          // {"ietf-yang-structure-ext","2020-06-17", nullptr},
-          // {"ietf-inet-types","2013-07-15", nullptr},
-          // {"ietf-yang-types","2013-07-15", nullptr},
-          // XXX shouldnt even load this I dont think.... Omit loading
-          // ietf-yang-library by default; tests provide any required
-          // yang-library
-          // {"ietf-yang-library","2019-01-04", nullptr},
-          // {"yang","2025-01-29", nullptr},
-          // {"ietf-yang-metadata","2016-08-05", nullptr},
+          {"default","2025-06-18", nullptr},          
+          {"ietf-datastores","2018-02-14", nullptr},
+          {"ietf-yang-structure-ext","2020-06-17", nullptr},
+          {"ietf-inet-types","2013-07-15", nullptr},
+          {"ietf-yang-types","2013-07-15", nullptr},
+          {"ietf-yang-library","2019-01-04", nullptr},
+          {"ietf-yang-schema-mount","2019-01-14", nullptr},
+          {"yang","2025-01-29", nullptr},
+          {"ietf-yang-metadata","2016-08-05", nullptr},
           // {"iana-bfd-types","2021-10-21", nullptr},
           // {"iana-bgp-l2-encaps","2022-09-20", nullptr},
           // {"iana-crypt-hash","2014-08-06", nullptr},

@@ -123,6 +123,20 @@ namespace yang {
       }
     }
 
+    // Ensure the named module (optionally by revision) is marked implemented
+    // in the underlying libyang context. No-op if context is null.
+    void ensureModuleImplemented(const std::string &name,
+                                 const std::string &revision = "");
+
+    // Return true if the named module is present and implemented in the
+    // underlying libyang context; false otherwise (or if no context).
+    bool CheckModuleImplemented(const std::string &name,
+                                const std::string &revision = "") const;
+
+    // Convenience helpers
+    void ensureYangLibraryImplemented();
+    void ensureSchemaMountImplemented();
+
   private:
     struct ly_ctx *ctx_ = nullptr;
     std::vector<std::string> search_paths_;

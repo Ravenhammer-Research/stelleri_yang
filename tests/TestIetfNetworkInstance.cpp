@@ -28,51 +28,49 @@ ATF_TEST_CASE_BODY(ietf_network_instance_roundtrip) {
 
     auto ctx = Yang::getDefaultContext();
 
+    // register ext-data callback for schema-mount handling
+    ctx->registerExtDataCallback(&IetfNetworkInstances::extDataCallback,
+                                 nullptr);
+
+    // Ensure critical modules are marked implemented so yang-library/schema-mount 
+    // are available, the callback requires this.
+    ctx->ensureYangLibraryImplemented();
+    ctx->ensureSchemaMountImplemented();
+
+    // Test XML structure:
+    // - ietf-network-instance defines mount points (vrf-root/vsi-root/vv-root) as containers
+    // - ietf-routing defines a top-level 'routing' container with control-plane-protocols list
+    // - The mounted data (routing config) goes directly inside vrf-root
+    // - NO yang-library or schema-mounts should be in the instance data
+    // - The ext-data callback provides yang-library + schema-mounts separately when requested by libyang
     const std::string xml = R"(<?xml version="1.0"?>
 <network-instances xmlns="urn:ietf:params:xml:ns:yang:ietf-network-instance">
   <network-instance>
-    <name>Customer-A</name>
-    <enabled>true</enabled>    
+    <name>VRF-A</name>    
+    <enabled>true</enabled>
+    <description>Test VRF instance</description>
     <vrf-root>
-        <routing xmlns="urn:ietf:params:xml:ns:yang:ietf-routing"
-                xmlns:if="urn:ietf:params:xml:ns:yang:ietf-interfaces">
+      <routing xmlns="urn:ietf:params:xml:ns:yang:ietf-routing">
         <control-plane-protocols>
-            <control-plane-protocol>
-            <type>static</type>
-            <name>static0</name>
-            <description>static routes for testing</description>         
-            </control-plane-protocol>
-            <control-plane-protocol>
-            <type>static</type>
-            <name>static1</name>
-            </control-plane-protocol>
-        </control-plane-protocols>
-
-        <ribs>
-            <rib>
-            <name>main</name>
-            <address-family>ipv4</address-family>
-            <routes>
+          <control-plane-protocol>
+            <type xmlns:rt="urn:ietf:params:xml:ns:yang:ietf-routing">rt:static</type>
+            <name>static-routing-vrf-a</name>
+            <static-routes>
+              <ipv4 xmlns="urn:ietf:params:xml:ns:yang:ietf-ipv4-unicast-routing">
                 <route>
-                <route-preference>20</route-preference>
-                <source-protocol>static</source-protocol>
-                <next-hop>
-                    <outgoing-interface>eth0</outgoing-interface>
-                </next-hop>
+                  <destination-prefix>10.0.0.0/24</destination-prefix>
+                  <next-hop>
+                    <next-hop-address>192.168.1.1</next-hop-address>
+                  </next-hop>
                 </route>
-            </routes>
-            </rib>
-        </ribs>      
-        </routing>
-    </vrf-root>    
+              </ipv4>
+            </static-routes>
+          </control-plane-protocol>
+        </control-plane-protocols>
+      </routing>
+    </vrf-root>
   </network-instance>
 </network-instances>)";
-
-    // register ext-data callback for schema-mount handling (minimal
-    // implementation) for perspective the call to this callback is precipitated
-    // by the parseXml call (returns yang data tree)
-    ctx->registerExtDataCallback(&IetfNetworkInstances::extDataCallback,
-                                 nullptr);
 
     struct lyd_node *tree = YangModel::parseXml(*ctx, xml);
     ATF_REQUIRE(tree != nullptr);
@@ -82,7 +80,7 @@ ATF_TEST_CASE_BODY(ietf_network_instance_roundtrip) {
 
     const auto &nis = parsed->getNetworkInstances();
     ATF_REQUIRE(nis.size() == 1);
-    ATF_REQUIRE(nis[0].getName() == std::string("Customer-A"));
+    ATF_REQUIRE(nis[0].getName() == std::string("VRF-A"));
     ATF_REQUIRE(nis[0].getEnabled() == true);
 
     lyd_free_all(tree);
