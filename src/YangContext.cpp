@@ -40,7 +40,8 @@ struct lys_module *YangContext::loadModuleInContext(const std::string &name,
   return mod;
 }
 
-const struct lys_module *YangContext::GetLoadedModuleByName(const std::string &name) const {
+const struct lys_module *
+YangContext::GetLoadedModuleByName(const std::string &name) const {
   if (!ctx_)
     return nullptr;
   uint32_t idx = 0;

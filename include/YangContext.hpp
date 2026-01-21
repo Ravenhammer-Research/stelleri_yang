@@ -109,7 +109,19 @@ namespace yang {
     struct ly_ctx *raw() const noexcept { return ctx_; }
 
     // Find a loaded module by name; returns nullptr if not found.
-    const struct lys_module *GetLoadedModuleByName(const std::string &name) const;
+    const struct lys_module *
+    GetLoadedModuleByName(const std::string &name) const;
+
+    // typedef for our callback type
+    using ExtDataCallback = void *(*)(const struct lys_ext_instance *, void *);
+
+    // Register an ext-data callback with the underlying libyang context.
+    // The provided user_data is passed through to the callback by libyang.
+    void registerExtDataCallback(ly_ext_data_clb cb, void *user_data) {
+      if (raw()) {
+        ly_ctx_set_ext_data_clb(raw(), cb, user_data);
+      }
+    }
 
   private:
     struct ly_ctx *ctx_ = nullptr;

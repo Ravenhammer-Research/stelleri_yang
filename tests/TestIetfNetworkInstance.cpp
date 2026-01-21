@@ -3,9 +3,9 @@
 #include "YangContext.hpp"
 #include "YangModel.hpp"
 #include <atf-c++.hpp>
-#include <memory>
 #include <cstdio>
 #include <libyang/log.h>
+#include <memory>
 
 using namespace yang;
 
@@ -19,18 +19,16 @@ ATF_TEST_CASE_BODY(ietf_network_instance_roundtrip) {
     ly_set_log_clb([](LY_LOG_LEVEL level, const char *msg,
                       const char *data_path, const char *schema_path,
                       uint64_t line) {
-       std::fprintf(stderr, "libyang[%d]: %s (data:%s schema:%s line:%llu)\n",
-                    (int)level, msg ? msg : "", data_path ? data_path : "-",
-                    schema_path ? schema_path : "-", (unsigned long long)line);
-     });
-     (void)ly_log_level(LY_LLDBG);
-     (void)ly_log_options(LY_LOLOG | LY_LOSTORE);
+      std::fprintf(stderr, "libyang[%d]: %s (data:%s schema:%s line:%llu)\n",
+                   (int)level, msg ? msg : "", data_path ? data_path : "-",
+                   schema_path ? schema_path : "-", (unsigned long long)line);
+    });
+    (void)ly_log_level(LY_LLDBG);
+    (void)ly_log_options(LY_LOLOG | LY_LOSTORE);
 
-     auto ctx = Yang::getDefaultContext();
+    auto ctx = Yang::getDefaultContext();
 
-     // (schema-mount callback registration removed)
-     
-     const std::string xml = R"(<?xml version="1.0"?>
+    const std::string xml = R"(<?xml version="1.0"?>
 <network-instances xmlns="urn:ietf:params:xml:ns:yang:ietf-network-instance">
   <network-instance>
     <name>Customer-A</name>
@@ -70,6 +68,12 @@ ATF_TEST_CASE_BODY(ietf_network_instance_roundtrip) {
   </network-instance>
 </network-instances>)";
 
+    // register ext-data callback for schema-mount handling (minimal
+    // implementation) for perspective the call to this callback is precipitated
+    // by the parseXml call (returns yang data tree)
+    ctx->registerExtDataCallback(&IetfNetworkInstances::extDataCallback,
+                                 nullptr);
+
     struct lyd_node *tree = YangModel::parseXml(*ctx, xml);
     ATF_REQUIRE(tree != nullptr);
 
@@ -89,4 +93,6 @@ ATF_TEST_CASE_BODY(ietf_network_instance_roundtrip) {
   }
 }
 
-ATF_INIT_TEST_CASES(tcs) { ATF_ADD_TEST_CASE(tcs, ietf_network_instance_roundtrip); }
+ATF_INIT_TEST_CASES(tcs) {
+  ATF_ADD_TEST_CASE(tcs, ietf_network_instance_roundtrip);
+}

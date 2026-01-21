@@ -1,13 +1,14 @@
 #include "IetfNetworkInstance.hpp"
 #include "Exceptions.hpp"
-#include <libyang/libyang.h>
-#include <cstring>
-#include "IetfRouting.hpp"
 #include "IetfInterfaces.hpp"
+#include "IetfRouting.hpp"
+#include <cstring>
+#include <libyang/libyang.h>
 
 using namespace yang;
 
-static struct lyd_node *find_child_by_name_local(struct lyd_node *parent, const char *name) {
+static struct lyd_node *find_child_by_name_local(struct lyd_node *parent,
+                                                 const char *name) {
   if (!parent)
     return nullptr;
   for (struct lyd_node *c = lyd_child(parent); c; c = c->next) {
@@ -26,20 +27,25 @@ static const char *get_node_value_local(struct lyd_node *n) {
 struct lyd_node *IetfNetworkInstances::serialize(const YangContext &ctx) const {
   struct ly_ctx *c = ctx.raw();
   struct lyd_node *root = nullptr;
-  if (lyd_new_path(nullptr, c, "/ietf-network-instance:network-instances", NULL, 0, &root) != LY_SUCCESS)
+  if (lyd_new_path(nullptr, c, "/ietf-network-instance:network-instances", NULL,
+                   0, &root) != LY_SUCCESS)
     throw YangDataError(ctx);
 
   for (const auto &ni : instances_) {
-    std::string pred = "network-instances/network-instance[name='" + ni.getName() + "']";
+    std::string pred =
+        "network-instances/network-instance[name='" + ni.getName() + "']";
     struct lyd_node *tmp = nullptr;
-    if (lyd_new_path(root, c, (pred + "/name").c_str(), ni.getName().c_str(), 0, &tmp) != LY_SUCCESS)
+    if (lyd_new_path(root, c, (pred + "/name").c_str(), ni.getName().c_str(), 0,
+                     &tmp) != LY_SUCCESS)
       throw YangDataError(ctx);
     if (!ni.getEnabled()) {
-      if (lyd_new_path(root, c, (pred + "/enabled").c_str(), "false", 0, &tmp) != LY_SUCCESS)
+      if (lyd_new_path(root, c, (pred + "/enabled").c_str(), "false", 0,
+                       &tmp) != LY_SUCCESS)
         throw YangDataError(ctx);
     }
     if (ni.getDescription().has_value()) {
-      if (lyd_new_path(root, c, (pred + "/description").c_str(), ni.getDescription()->c_str(), 0, &tmp) != LY_SUCCESS)
+      if (lyd_new_path(root, c, (pred + "/description").c_str(),
+                       ni.getDescription()->c_str(), 0, &tmp) != LY_SUCCESS)
         throw YangDataError(ctx);
     }
   }
@@ -47,26 +53,31 @@ struct lyd_node *IetfNetworkInstances::serialize(const YangContext &ctx) const {
   return root;
 }
 
-std::unique_ptr<IetfNetworkInstances> IetfNetworkInstances::deserialize(const YangContext &ctx, struct lyd_node *tree) {
+std::unique_ptr<IetfNetworkInstances>
+IetfNetworkInstances::deserialize(const YangContext &ctx,
+                                  struct lyd_node *tree) {
   if (!tree)
     throw YangDataError(ctx);
 
   auto model = std::make_unique<IetfNetworkInstances>();
 
   struct lyd_node *ni_container = nullptr;
-  if (tree->schema && tree->schema->name && strcmp(tree->schema->name, "network-instances") == 0 &&
+  if (tree->schema && tree->schema->name &&
+      strcmp(tree->schema->name, "network-instances") == 0 &&
       tree->schema->module && tree->schema->module->name &&
       strcmp(tree->schema->module->name, "ietf-network-instance") == 0) {
     ni_container = tree;
   } else {
-    if (lyd_find_path(tree, "/ietf-network-instance:network-instances", 0, &ni_container) != LY_SUCCESS)
+    if (lyd_find_path(tree, "/ietf-network-instance:network-instances", 0,
+                      &ni_container) != LY_SUCCESS)
       ni_container = nullptr;
   }
 
   if (!ni_container)
     return model; // empty
 
-  for (struct lyd_node *entry = lyd_child(ni_container); entry; entry = entry->next) {
+  for (struct lyd_node *entry = lyd_child(ni_container); entry;
+       entry = entry->next) {
     if (!entry->schema || !entry->schema->name)
       continue;
     if (strcmp(entry->schema->name, "network-instance") != 0)
@@ -99,13 +110,15 @@ std::unique_ptr<IetfNetworkInstances> IetfNetworkInstances::deserialize(const Ya
         continue;
       }
 
-      // mount-point containers defined in ietf-network-instance (vrf-root/vsi-root/vv-root)
+      // mount-point containers defined in ietf-network-instance
+      // (vrf-root/vsi-root/vv-root)
       if (c->schema->module && c->schema->module->name &&
           strcmp(c->schema->module->name, "ietf-network-instance") == 0) {
         if (strcmp(c->schema->name, "vrf-root") == 0 ||
             strcmp(c->schema->name, "vsi-root") == 0 ||
             strcmp(c->schema->name, "vv-root") == 0) {
-          // traverse children of the mount container and dispatch to module-specific parsers
+          // traverse children of the mount container and dispatch to
+          // module-specific parsers
           for (struct lyd_node *mc = lyd_child(c); mc; mc = mc->next) {
             if (!mc->schema || !mc->schema->module || !mc->schema->module->name)
               continue;
@@ -130,4 +143,28 @@ std::unique_ptr<IetfNetworkInstances> IetfNetworkInstances::deserialize(const Ya
   }
 
   return model;
+}
+
+// Minimal ext-data callback: return the supplied user_data as the opaque
+// handle. Libyang will call this when encountering the schema-mount extension
+// instance. Adjust implementation if your schema-mount plugin expects a
+// different handle.
+void *IetfNetworkInstances::extDataCallback(const struct lys_ext_instance *ext,
+                                            void *user_data) {
+  (void)ext; // unused in this minimal implementation
+  return user_data;
+}
+
+// libyang ext-data callback: supply opaque handle for schema-mount extension.
+// Minimal implementation: return the provided user_data as the ext-data handle.
+LY_ERR IetfNetworkInstances::extDataCallback(
+    const struct lysc_ext_instance *ext, const struct lyd_node *node,
+    void *user_data, void **ext_data, ly_bool *need_free) {
+  (void)ext;
+  (void)node;
+  if (ext_data)
+    *ext_data = user_data;
+  if (need_free)
+    *need_free = 0; /* caller should not free the handle */
+  return LY_SUCCESS;
 }
