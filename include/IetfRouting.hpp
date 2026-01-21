@@ -2,6 +2,7 @@
 
 #include "IetfYangTypes.hpp"
 #include "YangModel.hpp"
+#include "IetfInterfaces.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -79,6 +80,11 @@ namespace yang {
       // container interfaces (config false)
       std::vector<std::string> interfaces; // leaf-list of if:interface-ref
 
+      // Detailed interface information when available (parsed from a
+      // top-level /ietf-interfaces:interfaces container). This holds the
+      // full `IetfInterface` objects parsed by `IetfInterfaces`.
+      std::vector<IetfInterfaces::IetfInterface> interfaces_info;
+
       std::vector<ControlPlaneProtocol> control_plane_protocols;
 
       std::vector<Rib> ribs;
@@ -87,6 +93,14 @@ namespace yang {
     // Accessors
     const Routing &getRouting() const noexcept { return routing_; }
     Routing &mutableRouting() noexcept { return routing_; }
+
+    // Returns parsed interface objects (if the input provided a
+    // top-level /ietf-interfaces:interfaces container). This is empty if
+    // no interface data was provided.
+    const std::vector<IetfInterfaces::IetfInterface> &getInterfacesInfo()
+        const noexcept {
+      return routing_.interfaces_info;
+    }
 
     // YangModel interface
     struct lyd_node *serialize(const YangContext &ctx) const override;
