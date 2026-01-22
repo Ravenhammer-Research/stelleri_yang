@@ -180,48 +180,69 @@ LY_ERR IetfNetworkInstances::extDataCallback(const struct lysc_ext_instance *ext
   // This provides metadata about the mounted schema (ietf-routing, ietf-interfaces) and
   // tells libyang to use shared-schema (parent context) for resolution
   std::string ext_xml = std::string(
-    R"(<?xml version="1.0"?>)"
-    R"(<yang-library xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-library">)"
-    R"(<content-id>1</content-id>)"
-    R"(<module-set><name>vrf-modules</name>)"
-    R"(<module>)"
-    R"(<name>ietf-routing</name>)"
-    R"(<revision>2018-03-13</revision>)"
-    R"(<namespace>urn:ietf:params:xml:ns:yang:ietf-routing</namespace>)"
-    R"(</module>)"
-    R"(<module>)"
-    R"(<name>ietf-interfaces</name>)"
-    R"(<revision>2018-02-20</revision>)"
-    R"(<namespace>urn:ietf:params:xml:ns:yang:ietf-interfaces</namespace>)"
-    R"(</module>)"
-    R"(</module-set>)"
-    R"(<schema><name>vrf-schema</name><module-set>vrf-modules</module-set></schema>)"
-    R"(</yang-library>)"
-    R"(<modules-state xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-library">)"
-    R"(<module-set-id>1</module-set-id>)"
-    R"(</modules-state>)"
-    R"(<schema-mounts xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-schema-mount">)"
-    R"(<mount-point>)"
-    R"(<module>ietf-network-instance</module>)"
-    R"(<label>)" + std::string(label_name) + R"(</label>)"
-    R"(<shared-schema/>)"
-    R"(</mount-point>)"
-    R"(</schema-mounts>)"
-  );
+    R"(<?xml version="1.0" encoding="UTF-8"?>)"
+    R"(  <yang-library xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-library">)"
+    R"(    <content-id>1</content-id>)"
+    R"(    <module-set>)"
+    R"(      <name>vrf-modules</name>)"
+    R"(      <module>)"
+    R"(        <name>ietf-routing</name>)"
+    R"(        <revision>2018-03-13</revision>)"
+    R"(        <namespace>urn:ietf:params:xml:ns:yang:ietf-routing</namespace>)"
+    R"(      </module>)"
+    R"(      <module>)"
+    R"(        <name>ietf-interfaces</name>)"
+    R"(        <revision>2018-02-20</revision>)"
+    R"(        <namespace>urn:ietf:params:xml:ns:yang:ietf-interfaces</namespace>)"
+    R"(      </module>)"
+    R"(    </module-set>)"
+    R"(    <schema>)"
+    R"(      <name>vrf-schema</name>)"
+    R"(      <module-set>vrf-modules</module-set>)"
+    R"(    </schema>)"
+    R"(  </yang-library>)"
+    R"(  <modules-state xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-library">)"
+    R"(    <module-set-id>1</module-set-id>)"
+    R"(  </modules-state>)"
+    R"(  <schema-mounts xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-schema-mount">)"
+    R"(    <mount-point>)"
+    R"(      <module>ietf-network-instance</module>)"
+    R"(      <label>shitcock</label>)"
+    R"(      <shared-schema/>)"
+    R"(    </mount-point>)"
+    R"(  </schema-mounts>)");
+
+  fprintf(stderr, "ext_data (preparsed XML):\n%s\n", ext_xml.c_str());
 
   struct lyd_node *parsed = nullptr;
-  if (lyd_parse_data_mem(ctx, ext_xml.c_str(), LYD_XML, 0, 0, &parsed) != LY_SUCCESS) {
-    if (parsed)
-      lyd_free_all(parsed);
+  /* parse as a single XML document (no OPAQ flag), then validate */
+  if (lyd_parse_data_mem(ctx, ext_xml.c_str(), LYD_XML, LYD_PARSE_ONLY, 0, &parsed) != LY_SUCCESS) {
+    if (parsed) {
+      char *printed = nullptr;
+      lyd_print_mem(&printed, parsed, LYD_XML, 0);
+      fprintf(stderr, "ext_data (oops1 XML):\n%s\n", printed);
+      lyd_free_all(parsed);      
+    }
     throw YangError();
   }
+  
+  char *printed = nullptr;
+  lyd_print_mem(&printed, parsed, LYD_XML, 0);
+  fprintf(stderr, "ext_data (after parse XML):\n%s\n", printed);
 
   if (lyd_validate_all(&parsed, nullptr, LYD_VALIDATE_PRESENT, nullptr) != LY_SUCCESS) {
+    char *printed = nullptr;
+    lyd_print_mem(&printed, parsed, LYD_XML, 0);
+    fprintf(stderr, "ext_data (oops2 XML):\n%s\n", printed);
     lyd_free_all(parsed);
     throw YangError();
   }
+  
+  lyd_print_mem(&printed, parsed, LYD_XML, 0);
+  fprintf(stderr, "ext_data (pretty parsed/validated XML):\n%s\n", printed);
+        
 
   *ext_data = parsed;
-  *free_ext_data = 1;
+  *free_ext_data = 0;
   return LY_SUCCESS;
 }
