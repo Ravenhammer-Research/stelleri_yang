@@ -160,6 +160,42 @@ IetfNetworkInstances::deserialize(const YangContext &ctx,
   return model;
 }
 
+/*
+ *  ly_ext_data_clb, set by ly_ctx_set_ext_data_clb
+ * Callback for getting arbitrary run-time data required by an extension instance.
+ * Parameters
+ *   [in]	ext	Compiled extension instance.
+ *   [in]	parent	Data parent node instance of a schema node with ext instance. In special cases (when not working with data) it can be NULL!
+ *   [in]	user_data	User-supplied callback data.
+ *   [out]	ext_data	Provided extension instance data.
+    [out]	ext_data_free	Whether the extension instance should free ext_data or not.
+ * Returns
+ *   LY_ERR value. 
+ * Definition at line 536 of file context.h.
+ *
+ * struct lysc_ext_instance
+ * YANG extension compiled instance.
+ * Definition at line 436 of file plugins_exts.h.
+ * Data Fields
+ * const char * 	argument 	
+ * optional value of the extension's argument
+ * void * 	compiled 	    
+ * private plugin compiled data
+ * struct lysc_ext * 	def 	
+ * pointer to the extension definition
+ * struct lysc_ext_instance * 	exts 	
+ * list of the extension instances (sized array)
+ * struct lys_module * 	module 	
+ * module where the extension instantiated is defined
+ * void * 	parent 	
+ * pointer to the parent element holding the extension instance(s), use lysc_ext_instance::parent_stmt to access the value/structure
+ * enum ly_stmt 	parent_stmt 	
+ * type of the parent statement
+ * uint64_t 	parent_stmt_index 	
+ * index of the stamenet in case the parent does not point to the parent statement directly and it is an array
+ * struct lysc_ext_substmt * 	substmts 	
+ * list of supported known YANG statements with the pointer to their compiled data (sized array) 
+ */
 LY_ERR IetfNetworkInstances::extDataCallback(const struct lysc_ext_instance *ext,
                                               [[maybe_unused]] const struct lyd_node *node,
                                               [[maybe_unused]] void *user_data,
