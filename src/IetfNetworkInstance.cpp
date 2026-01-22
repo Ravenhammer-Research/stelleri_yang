@@ -5,6 +5,7 @@
 #include <cstring>
 #include <libyang/libyang.h>
 #include <cstdlib>
+#include <cstdio> // added for logging
 
 using namespace yang;
 
@@ -29,25 +30,36 @@ struct lyd_node *IetfNetworkInstances::serialize(const YangContext &ctx) const {
   struct ly_ctx *c = ctx.raw();
   struct lyd_node *root = nullptr;
   if (lyd_new_path(nullptr, c, "/ietf-network-instance:network-instances", NULL,
-                   0, &root) != LY_SUCCESS)
-    throw YangDataError(ctx);
+                   0, &root) != LY_SUCCESS) {
+    fprintf(stderr, "YangDataError: IetfNetworkInstances::serialize failed to create root node\n");
+    return nullptr;
+  }
 
   for (const auto &ni : instances_) {
     std::string pred =
         "network-instances/network-instance[name='" + ni.getName() + "']";
     struct lyd_node *tmp = nullptr;
     if (lyd_new_path(root, c, (pred + "/name").c_str(), ni.getName().c_str(), 0,
-                     &tmp) != LY_SUCCESS)
-      throw YangDataError(ctx);
+                     &tmp) != LY_SUCCESS) {
+      fprintf(stderr, "YangDataError: IetfNetworkInstances::serialize failed to create name node for '%s'\n", ni.getName().c_str());
+      lyd_free_all(root);
+      return nullptr;
+    }
     if (!ni.getEnabled()) {
       if (lyd_new_path(root, c, (pred + "/enabled").c_str(), "false", 0,
-                       &tmp) != LY_SUCCESS)
-        throw YangDataError(ctx);
+                       &tmp) != LY_SUCCESS) {
+        fprintf(stderr, "YangDataError: IetfNetworkInstances::serialize failed to create enabled node for '%s'\n", ni.getName().c_str());
+        lyd_free_all(root);
+        return nullptr;
+      }
     }
     if (ni.getDescription().has_value()) {
       if (lyd_new_path(root, c, (pred + "/description").c_str(),
-                       ni.getDescription()->c_str(), 0, &tmp) != LY_SUCCESS)
-        throw YangDataError(ctx);
+                       ni.getDescription()->c_str(), 0, &tmp) != LY_SUCCESS) {
+        fprintf(stderr, "YangDataError: IetfNetworkInstances::serialize failed to create description for '%s'\n", ni.getName().c_str());
+        lyd_free_all(root);
+        return nullptr;
+      }
     }
   }
 
@@ -57,8 +69,10 @@ struct lyd_node *IetfNetworkInstances::serialize(const YangContext &ctx) const {
 std::unique_ptr<IetfNetworkInstances>
 IetfNetworkInstances::deserialize(const YangContext &ctx,
                                   struct lyd_node *tree) {
-  if (!tree)
-    throw YangDataError(ctx);
+  if (!tree) {
+    fprintf(stderr, "YangDataError: IetfNetworkInstances::deserialize called with null tree\n");
+    return std::make_unique<IetfNetworkInstances>();
+  }
 
   auto model = std::make_unique<IetfNetworkInstances>();
 
@@ -159,22 +173,28 @@ LY_ERR IetfNetworkInstances::extDataCallback(const struct lysc_ext_instance *ext
   // - Which modules are available in the mounted schema (yang-library)
   // - How the mount point is configured (schema-mounts with shared-schema)
   
-  if (!ext_data || !free_ext_data)
-    throw YangError();
+  if (!ext_data || !free_ext_data) {
+    fprintf(stderr, "YangError: IetfNetworkInstances::extDataCallback invalid ext_data/free_ext_data pointers\n");
+    return LY_EINVAL;
+  }
 
   *ext_data = nullptr;
   *free_ext_data = 0;
 
-  if (!node)
-    throw YangError();
+  if (!node) {
+    fprintf(stderr, "YangError: IetfNetworkInstances::extDataCallback called with null node\n");
+    return LY_EINVAL;
+  }
 
   struct ly_ctx *ctx = (struct ly_ctx *)LYD_CTX(node);
 
   const char *label_name = nullptr;
   if (node->schema && node->schema->name)
     label_name = node->schema->name;
-  if (!label_name)
-    throw YangError();
+  if (!label_name) {
+    fprintf(stderr, "YangError: IetfNetworkInstances::extDataCallback missing label_name\n");
+    return LY_EINVAL;
+  }
 
   // Build ext-data XML with BOTH modern yang-library AND deprecated modules-state (with module-set-id)
   // This provides metadata about the mounted schema (ietf-routing, ietf-interfaces) and
@@ -220,10 +240,11 @@ LY_ERR IetfNetworkInstances::extDataCallback(const struct lysc_ext_instance *ext
     if (parsed) {
       char *printed = nullptr;
       lyd_print_mem(&printed, parsed, LYD_XML, 0);
-      fprintf(stderr, "ext_data (oops1 XML):\n%s\n", printed);
-      lyd_free_all(parsed);      
+      fprintf(stderr, "ext_data parse produced partial tree:\n%s\n", printed);
+      lyd_free_all(parsed);
     }
-    throw YangError();
+    fprintf(stderr, "YangError: IetfNetworkInstances::extDataCallback failed to parse ext_xml\n");
+    return LY_EINVAL;
   }
   
   char *printed = nullptr;
@@ -233,9 +254,10 @@ LY_ERR IetfNetworkInstances::extDataCallback(const struct lysc_ext_instance *ext
   if (lyd_validate_all(&parsed, nullptr, LYD_VALIDATE_PRESENT, nullptr) != LY_SUCCESS) {
     char *printed = nullptr;
     lyd_print_mem(&printed, parsed, LYD_XML, 0);
-    fprintf(stderr, "ext_data (oops2 XML):\n%s\n", printed);
+    fprintf(stderr, "ext_data validation failed; parsed ext_data:\n%s\n", printed);
     lyd_free_all(parsed);
-    throw YangError();
+    fprintf(stderr, "YangError: IetfNetworkInstances::extDataCallback lyd_validate_all failed\n");
+    return LY_EVALID;
   }
   
   lyd_print_mem(&printed, parsed, LYD_XML, 0);
@@ -243,6 +265,6 @@ LY_ERR IetfNetworkInstances::extDataCallback(const struct lysc_ext_instance *ext
         
 
   *ext_data = parsed;
-  *free_ext_data = 0;
+  *free_ext_data = 0; // stop changing this to 1 
   return LY_SUCCESS;
 }
