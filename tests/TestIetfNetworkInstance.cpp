@@ -15,7 +15,7 @@ ATF_TEST_CASE_HEAD(ietf_network_instance_roundtrip) {
 }
 ATF_TEST_CASE_BODY(ietf_network_instance_roundtrip) {
   try {
-    /* Enable libyang logging for this test (debug + store) */
+    /* Enable libyang logging for debugging */
     ly_set_log_clb([](LY_LOG_LEVEL level, const char *msg,
                       const char *data_path, const char *schema_path,
                       uint64_t line) {
@@ -28,33 +28,32 @@ ATF_TEST_CASE_BODY(ietf_network_instance_roundtrip) {
 
     auto ctx = Yang::getDefaultContext();
 
-    // register ext-data callback for schema-mount handling
+    // Register ext-data callback BEFORE parsing any data
+    // This is critical for schema-mount to work
     ctx->registerExtDataCallback(&IetfNetworkInstances::extDataCallback,
                                  nullptr);
 
-    // Ensure critical modules are marked implemented so yang-library/schema-mount 
-    // are available, the callback requires this.
+    // Ensure critical modules are implemented
     ctx->ensureYangLibraryImplemented();
     ctx->ensureSchemaMountImplemented();
 
-    // Test XML structure:
-    // - ietf-network-instance defines mount points (vrf-root/vsi-root/vv-root) as containers
-    // - ietf-routing defines a top-level 'routing' container with control-plane-protocols list
-    // - The mounted data (routing config) goes directly inside vrf-root
-    // - NO yang-library or schema-mounts should be in the instance data
-    // - The ext-data callback provides yang-library + schema-mounts separately when requested by libyang
+    // Test XML with mounted routing data inside vrf-root
+    // Per RFC 8528 and ietf-network-instance YANG:
+    // - vrf-root is a mount point for L3VPN routing
+    // - The mounted schema contains ietf-routing and augmentations
+    // - Instance data inside vrf-root follows the mounted schema
     const std::string xml = R"(<?xml version="1.0"?>
 <network-instances xmlns="urn:ietf:params:xml:ns:yang:ietf-network-instance">
   <network-instance>
-    <name>VRF-A</name>    
+    <name>VRF-A</name>
     <enabled>true</enabled>
-    <description>Test VRF instance</description>
+    <description>Test VRF instance with static routing</description>
     <vrf-root>
       <routing xmlns="urn:ietf:params:xml:ns:yang:ietf-routing">
         <control-plane-protocols>
           <control-plane-protocol>
             <type xmlns:rt="urn:ietf:params:xml:ns:yang:ietf-routing">rt:static</type>
-            <name>static-routing-vrf-a</name>
+            <name>static-vrf-a</name>
             <static-routes>
               <ipv4 xmlns="urn:ietf:params:xml:ns:yang:ietf-ipv4-unicast-routing">
                 <route>
@@ -72,16 +71,53 @@ ATF_TEST_CASE_BODY(ietf_network_instance_roundtrip) {
   </network-instance>
 </network-instances>)";
 
+    // Parse the XML with schema mount support
     struct lyd_node *tree = YangModel::parseXml(*ctx, xml);
-    ATF_REQUIRE(tree != nullptr);
+    if (tree == nullptr) {
+      ATF_FAIL("Failed to parse XML with mounted data");
+    }
 
+    // Validate the tree
+    LY_ERR rc = lyd_validate_all(&tree, NULL, LYD_VALIDATE_PRESENT, NULL);
+    if (rc != LY_SUCCESS) {
+      lyd_free_all(tree);
+      ATF_FAIL("Validation failed");
+    }
+
+    // Deserialize into C++ model
     auto parsed = IetfNetworkInstances::deserialize(*ctx, tree);
-    ATF_REQUIRE(parsed != nullptr);
+    if (!parsed) {
+      lyd_free_all(tree);
+      ATF_FAIL("Deserialization failed");
+    }
 
+    // Verify the parsed data
     const auto &nis = parsed->getNetworkInstances();
-    ATF_REQUIRE(nis.size() == 1);
-    ATF_REQUIRE(nis[0].getName() == std::string("VRF-A"));
-    ATF_REQUIRE(nis[0].getEnabled() == true);
+    if (nis.size() != 1) {
+      lyd_free_all(tree);
+      ATF_FAIL("Expected 1 network instance");
+    }
+    if (nis[0].getName() != "VRF-A") {
+      lyd_free_all(tree);
+      ATF_FAIL("Wrong name");
+    }
+    if (nis[0].getEnabled() != true) {
+      lyd_free_all(tree);
+      ATF_FAIL("Should be enabled");
+    }
+    if (!nis[0].getDescription().has_value()) {
+      lyd_free_all(tree);
+      ATF_FAIL("Should have description");
+    }
+    if (nis[0].getDescription().value() != "Test VRF instance with static routing") {
+      lyd_free_all(tree);
+      ATF_FAIL("Wrong description");
+    }
+
+    // Check if routing data was captured (if implemented)
+    if (nis[0].getRouting()) {
+      std::fprintf(stderr, "Successfully parsed mounted routing data\n");
+    }
 
     lyd_free_all(tree);
   } catch (const YangError &e) {

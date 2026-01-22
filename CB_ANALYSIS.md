@@ -76,9 +76,33 @@
 
 ### Next Steps
 
-1. Add ietf-ipv4-unicast-routing to module-set (fix "unknown node" warning)
-2. Investigate why inline context's internal yang-library validation fails
-3. May need to check ly_ctx_new_yldata() in schema_mount_create_ctx() (line 329)
+**IMMEDIATE FIX from libyang test_schema_mount.c:**
+
+The libyang test shows inline mode requires **meta-modules** in the module-set:
+1. `ietf-datastores` - Required for datastore definitions
+2. `ietf-yang-library` - Required for the yang-library itself
+3. `ietf-yang-schema-mount` - Required for schema-mounts
+4. Use `<import-only-module>` for indirect dependencies like ietf-yang-types/ietf-inet-types
+
+Our module-set only lists ietf-routing and ietf-interfaces. The inline context needs these meta-modules to create its own yang-library data!
+
+**Working example from libyang tests:**
+```xml
+<module-set>
+  <name>test-set</name>
+  <module><name>ietf-datastores</name><revision>2018-02-14</revision>...</module>
+  <module><name>ietf-yang-library</name><revision>2019-01-04</revision>...</module>
+  <module><name>ietf-yang-schema-mount</name><revision>2019-01-14</revision>...</module>
+  <module><name>ietf-interfaces</name>...</module>
+  <module><name>iana-if-type</name>...</module>
+  <import-only-module><name>ietf-yang-types</name>...</import-only-module>
+</module-set>
+```
+
+1. Add ietf-datastores, ietf-yang-library, ietf-yang-schema-mount to module-set
+2. Add ietf-ipv4-unicast-routing to module-set (fix "unknown node" warning)  
+3. Use import-only-module for ietf-inet-types and ietf-yang-types
+4. Consider adding operational datastore in addition to running
 
 ---
 
