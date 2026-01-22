@@ -1,8 +1,90 @@
 # Schema-Mount Callback Analysis & Findings
 
-## 🔴 CRITICAL FINDING (2026-01-21 22:59)
+## � BREAKTHROUGH: Inline Mode Success (2026-01-22 01:50)
 
-### The Paradox
+### Summary
+
+**Changed `<shared-schema/>` to `<inline/>` - MAJOR PROGRESS!**
+
+### What Now Works ✅
+
+1. **Plugin finds yang-library data** - No more "Could not find 'yang-library' data" error
+2. **Plugin creates inline context** - Successfully creates separate context for mount point
+3. **Module loading works** - Plugin loads modules from yang-library:
+   - ietf-inet-types@2013-07-15 ✓
+   - ietf-yang-types@2013-07-15 ✓
+   - ietf-routing@2018-03-13 ✓
+   - ietf-interfaces@2018-02-20 ✓
+4. **Callback executes multiple times** - Called during:
+   - **1st call:** Schema compilation with `parent_path = /ietf-network-instance:vrf-root`
+   - **2nd call:** Data parsing with `parent_path = /ietf-network-instance:network-instances/network-instance[name='VRF-A']/vrf-root`
+   - This is **EXPECTED BEHAVIOR** - inline mode needs schema context setup then data validation
+
+### Current Issue ❌
+
+**Error:** `Mandatory node "content-id" instance does not exist` in `/ietf-yang-library:yang-library`
+
+**Key Observations:**
+- Our ext_data **DOES contain** `<content-id>1</content-id>` (verified in debug output)
+- Error occurs AFTER plugin processes our callback data
+- Missing ietf-ipv4-unicast-routing causes: "Skipping parsing of unknown node 'ipv4'"
+
+**Likely Cause:** The inline context creates its OWN yang-library data for the new context, and that data is missing content-id. This is NOT about our ext_data, but about the plugin's internal yang-library generation for the inline context.
+
+### Technical Details
+
+**ext_data Structure (returned by callback):**
+```xml
+<yang-library xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-library">
+  <module-set><name>vrf-modules</name>
+    <module><name>ietf-routing</name><revision>2018-03-13</revision>...</module>
+    <module><name>ietf-interfaces</name><revision>2018-02-20</revision>...</module>
+  </module-set>
+  <schema><name>vrf-schema</name><module-set>vrf-modules</module-set></schema>
+  <datastore><name>ds:running</name><schema>vrf-schema</schema></datastore>
+  <content-id>1</content-id>
+</yang-library>
+<modules-state xmlns="..."><module-set-id>1</module-set-id></modules-state>
+<schema-mounts xmlns="...">
+  <mount-point><module>ietf-network-instance</module><label>vrf-root</label>
+    <config>true</config><inline/></mount-point>
+</schema-mounts>
+```
+
+**Plugin Behavior with inline mode:**
+1. Receives ext_data from callback ✓
+2. Calls `schema_mount_get_yanglib()` (line 827) - finds yang-library in ext_data ✓
+3. Calls `schema_mount_create_ctx()` (line 838) to create new context from yang-library ✓
+4. Loads modules into new inline context ✓
+5. **FAILS** validating the inline context's internal yang-library data
+
+### Why inline Mode vs shared-schema?
+
+**From schema_mount.c investigation:**
+
+**shared-schema mode (line 389-411):**
+- Expects yang-library as **CHILD** of parent path
+- Requires structure: `/ietf-network-instance:.../vrf-root/yang-library`
+- We were providing top-level yang-library (wrong nesting)
+
+**inline mode (line 383-384):**
+- Uses direct `lyd_find_path(ext_data, "/ietf-yang-library:yang-library", ...)`
+- Accepts top-level yang-library (matches our structure)
+- Creates separate context per mount point instance
+
+**Inline mode matches our callback's data structure!** This is why switching fixed the "Could not find" error.
+
+### Next Steps
+
+1. Add ietf-ipv4-unicast-routing to module-set (fix "unknown node" warning)
+2. Investigate why inline context's internal yang-library validation fails
+3. May need to check ly_ctx_new_yldata() in schema_mount_create_ctx() (line 329)
+
+---
+
+## 🔴 PREVIOUS FINDING (2026-01-21 22:59) - RESOLVED
+
+### The Paradox (NOW EXPLAINED)
 
 **Our callback CAN find yang-library using lyd_find_path(), but the plugin reports it CANNOT.**
 
@@ -243,6 +325,37 @@ struct lyd_node {
 1. **IMMEDIATE:** Try Option B - change `<shared-schema/>` to `<inline/>` in schema-mounts
 2. **IF THAT FAILS:** Implement Option A - properly nest yang-library under parent path structure
 3. **VERIFY:** Check if inline mode requires different module handling (may create separate context)
+
+---
+
+## 🟢 BREAKTHROUGH: Inline Mode (2026-01-22 01:48)
+
+### Changed `<shared-schema/>` to `<inline/>`
+
+**Result:** Plugin behavior CHANGED
+
+✅ **What Now Works:**
+- Plugin NO LONGER reports "Could not find 'yang-library' data"
+- Plugin successfully finds yang-library in ext_data
+- Plugin creates inline context and loads modules:
+  - ietf-routing@2018-03-13 ✓
+  - ietf-interfaces@2018-02-20 ✓
+  - ietf-ipv4-unicast-routing@2018-03-13 ✓
+
+❌ **New Error:**
+```
+libyang[0]: Mandatory node "content-id" instance does not exist.
+Data path: /ietf-yang-library:yang-library
+```
+
+**But our ext_data HAS content-id:**
+```xml
+<content-id>1</content-id>
+```
+
+This error appears AFTER the plugin processes our data. The inline mode creates a separate context, and the error may be about that context's yang-library data, not the ext_data we returned.
+
+**Status:** Inline mode partially works but hits validation error in plugin's internal processing.
 
 ---
 

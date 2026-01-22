@@ -325,7 +325,7 @@ LY_ERR IetfNetworkInstances::extDataCallback(const struct lysc_ext_instance *ext
     R"(<mount-point>)"
     R"(<module>ietf-network-instance</module>)"
     R"(<label>)" + label + R"(</label>)"
-    R"(<shared-schema/>)"
+    R"(<inline/>)"
     R"(</mount-point>)"
     R"(</schema-mounts>)");
 
