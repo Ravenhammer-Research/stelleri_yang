@@ -46,10 +46,203 @@ lyd_find_path(ext_data, "/ietf-yang-library:yang-library", 0, &ext_yl_data);  //
 
 **Possible reasons:**
 1. Context mismatch - plugin uses different context when searching?
-2. Wrong return value - should we return `yang-library` node directly instead of tree root `parsed`?
+2. ~~Wrong return value - should we return `yang-library` node directly instead of tree root `parsed`?~~ **TESTED & RULED OUT** (see below)
 3. Shared vs inline mode - we use shared-schema (line 484-485), not inline (line 383-384)
 4. Additional validation after find - plugin may find it but reject it for other reasons
 5. Timing issue - something changes between our return and plugin's use?
+
+### 🔴 ATTEMPT: Return yang-library Node Directly (2026-01-22 00:15)
+
+**Tried:** Return `test_find` (yang-library node) instead of `parsed` (tree root)
+
+**Result:** FAILED - Same error from plugin
+
+**Why it failed:**
+```
+[extDataCallback] RETURNING: node=0x5b5fc8bbad20, name='yang-library', module='ietf-yang-library'
+[extDataCallback] RETURNING: node->parent=(nil), node->next=0x5b5fc8bbddf0, node->prev=0x5b5fc8bbde40
+```
+
+The yang-library node has siblings (modules-state, schema-mounts) but `parent=nil`. These are **top-level siblings**, not a parent-child tree. When we return just the yang-library node from the middle of the sibling list, the plugin can't navigate the full structure.
+
+**Conclusion:** Must return the **tree root** (first node in sibling list), which is `parsed`. This matches common.c behavior. Plugin expects to receive the complete sibling structure so it can search through all top-level nodes.
+
+---
+
+## 🔬 LIBYANG SOURCE CODE INVESTIGATION (2026-01-22 00:45)
+
+### Deep Dive into schema_mount.c and Path Evaluation
+
+After thorough investigation of libyang's source tree, I've identified the **exact mechanism** causing our issue and have a clear understanding of the problem.
+
+#### Key Source Files Analyzed
+1. [src/plugins_exts/schema_mount.c](src/plugins_exts/schema_mount.c) - Schema mount extension plugin
+2. [src/path.c](src/path.c) - Path evaluation implementation  
+3. [src/tree_data.c](src/tree_data.c) - Data tree operations
+4. [src/tree_data.h](src/tree_data.h) - Data node structures
+
+### Critical Discovery: How lyd_find_path() Handles Absolute Paths
+
+From [path.c:1390-1399](src/path.c#L1390-L1399):
+
+```c
+if (lysc_data_parent(path[0].node)) {
+    /* relative path, start from the parent children */
+    start = lyd_child(start);
+} else {
+    /* absolute path, start from the first top-level sibling */
+    while (start->parent) {
+        start = lyd_parent(start);
+    }
+    while (start->prev->next) {
+        start = start->prev;
+    }
+}
+```
+
+**What this means:**
+- When `lyd_find_path()` is called with an absolute path like `/ietf-yang-library:yang-library`
+- It navigates to the **first top-level sibling** in the tree
+- Then searches through ALL top-level siblings
+
+**The search DOES traverse siblings** - it doesn't stop at the first node!
+
+### How schema_mount.c Uses yang-library Data
+
+#### Inline Mode (line 384)
+```c
+lyd_find_path(ext_data, "/ietf-yang-library:yang-library", 0, (struct lyd_node **)ext_yl_data);
+```
+
+#### Shared-Schema Mode (lines 478-486)
+Calls `schema_mount_get_yanglib()` which has TWO different code paths:
+
+**Path 1 - Inline mode (line 384):** Direct search
+```c
+lyd_find_path(ext_data, "/ietf-yang-library:yang-library", 0, (struct lyd_node **)ext_yl_data);
+```
+
+**Path 2 - Shared mode (lines 389-411):** Manual iteration through children
+```c
+/* get the parent(s) of 'yang-library' */
+if ((rc = lyd_find_xpath(ext_data, parent_path, &set))) {
+    goto cleanup;
+}
+
+/* find manually, may be from a different context */
+for (i = 0; i < set->count; ++i) {
+    LY_LIST_FOR(lyd_child(set->dnodes[i]), iter) {
+        if (!strcmp(LYD_NAME(iter), "yang-library") && 
+            !strcmp(lyd_node_module(iter)->name, "ietf-yang-library")) {
+            *ext_yl_data = iter;
+            break;
+        }
+    }
+}
+```
+
+### The Actual Problem
+
+Looking at [schema_mount.c:389-411](src/plugins_exts/schema_mount.c#L389-L411), for **shared-schema mode**, the plugin:
+
+1. Builds `parent_path` from the mount point location (e.g., `/ietf-network-instance:network-instances/network-instance/vrf-root`)
+2. Searches for that path in ext_data using `lyd_find_xpath()`  
+3. Then looks for `yang-library` as a **child** of the parent_path node
+
+**This is DIFFERENT from inline mode!** 
+
+### The Root Cause
+
+For **shared-schema**, the plugin expects:
+```xml
+<network-instances xmlns="...">
+  <network-instance>
+    <vrf-root>
+      <yang-library xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-library">
+        <!-- data here -->
+      </yang-library>
+    </vrf-root>
+  </network-instance>
+</network-instances>
+```
+
+But we're providing:
+```xml
+<yang-library xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-library">
+  <!-- data here -->
+</yang-library>
+<modules-state xmlns="...">...</modules-state>
+<schema-mounts xmlns="...">...</schema-mounts>
+```
+
+**The plugin searches for yang-library as a CHILD of the mount point parent, not as a top-level element!**
+
+### Error Location
+
+From [schema_mount.c:484-491](src/plugins_exts/schema_mount.c#L484-L491):
+```c
+if (!ext_yl_data) {
+    if (ext_ctx) {
+        path = lysc_path(ext->parent, LYSC_PATH_DATA, NULL, 0);
+        lyplg_ext_compile_log(NULL, ext, LY_LLERR, LY_EVALID, 
+            "Could not find 'yang-library' data in \"%s\".", path);
+        free(path);
+        rc = LY_EVALID;
+    }
+    goto cleanup;
+}
+```
+
+This is the **exact error message** we see!
+
+### Why Our Test Succeeds But Plugin Fails
+
+Our test (inline mode approach):
+```c
+lyd_find_path(parsed, "/ietf-yang-library:yang-library", 0, &test);  // ✅ Works
+```
+
+Plugin (shared-schema mode approach):
+```c
+lyd_find_xpath(ext_data, parent_path, &set);  // Searches for /ietf-network-instance:...
+LY_LIST_FOR(lyd_child(set->dnodes[i]), iter) {  // Looks in CHILDREN
+    if (!strcmp(LYD_NAME(iter), "yang-library")) { ... }  // ❌ Not found
+}
+```
+
+### The Solution
+
+We need to structure ext_data so yang-library appears **where the plugin expects it**. For shared-schema mode, that means nesting it under the mount point parent path.
+
+#### Option A: Nest yang-library under parent path (CORRECT for shared-schema)
+Build a data tree matching the parent_path structure with yang-library as a child.
+
+#### Option B: Use inline mode instead of shared-schema
+If we use `<inline/>` instead of `<shared-schema/>`, the plugin will use the simpler direct search (line 384) that WILL find our top-level yang-library element.
+
+### Data Tree Structure Reference
+
+From [tree_data.h:792-806](src/tree_data.h#L792-L806):
+```c
+struct lyd_node {
+    uint32_t hash;
+    uint32_t flags;
+    const struct lysc_node *schema;
+    struct lyd_node_inner *parent;   /**< pointer to the parent node, NULL in case of root node */
+    struct lyd_node *next;           /**< pointer to the next sibling node (NULL if there is no one) */
+    struct lyd_node *prev;           /**< pointer to the previous sibling node */
+    struct lyd_meta *meta;
+    void *priv;
+};
+```
+
+**Sibling Navigation:** The `prev` pointer of the first sibling points to the LAST sibling, forming a circular reference. This is how `lyd_find_path()` can traverse all top-level siblings.
+
+### Next Steps
+
+1. **IMMEDIATE:** Try Option B - change `<shared-schema/>` to `<inline/>` in schema-mounts
+2. **IF THAT FAILS:** Implement Option A - properly nest yang-library under parent path structure
+3. **VERIFY:** Check if inline mode requires different module handling (may create separate context)
 
 ---
 
@@ -73,11 +266,11 @@ lyd_find_path(ext_data, "/ietf-yang-library:yang-library", 0, &ext_yl_data);  //
 
 🔍 **Next Investigation Priorities:**
 
-1. **HIGH**: Check what node we're returning - should ext_data point to yang-library node or tree root?
+1. ~~**HIGH**: Check what node we're returning - should ext_data point to yang-library node or tree root?~~ **DONE** - Must return tree root (parsed)
 2. **HIGH**: Trace shared-schema path (line 484-485) vs inline path (383-384) in schema_mount.c
 3. **MEDIUM**: Add more debug to see EXACTLY what the plugin receives
 4. **MEDIUM**: Check if there's post-find validation that fails
-5. **LOW**: Try returning just yang-library node instead of full tree
+5. ~~**LOW**: Try returning just yang-library node instead of full tree~~ **TESTED & FAILED** - Breaks sibling structure
 
 ---
 

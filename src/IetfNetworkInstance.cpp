@@ -384,6 +384,13 @@ LY_ERR IetfNetworkInstances::extDataCallback(const struct lysc_ext_instance *ext
   lyd_print_file(stderr, parsed, LYD_XML, LYD_PRINT_SIBLINGS);
   fprintf(stderr, "\n[extDataCallback] End of parsed tree\n");
 
+  // Return the tree root (parsed), matching common.c behavior
+  // The plugin will search for yang-library within this tree
+  fprintf(stderr, "[extDataCallback] Returning tree root: parsed=%p, name='%s', module='%s'\n",
+          (void*)parsed,
+          parsed->schema ? parsed->schema->name : "NULL", 
+          parsed->schema && parsed->schema->module ? parsed->schema->module->name : "NULL");
+  
   *ext_data = parsed;
   *free_ext_data = 1;  // Match common.c: libyang will free the data
   
