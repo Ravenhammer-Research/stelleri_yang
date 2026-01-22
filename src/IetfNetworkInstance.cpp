@@ -273,11 +273,28 @@ LY_ERR IetfNetworkInstances::extDataCallback(const struct lysc_ext_instance *ext
 
   struct ly_ctx *ctx = ext->module->ctx;
   
+  // For shared-schema mode, verify that the modules we're declaring actually exist in parent context
+  // This is CRITICAL - shared-schema doesn't create new modules, it references existing ones
+  const struct lys_module *routing_mod = ly_ctx_get_module(ctx, "ietf-routing", "2018-03-13");
+  const struct lys_module *interfaces_mod = ly_ctx_get_module(ctx, "ietf-interfaces", "2018-02-20");
+  fprintf(stderr, "[extDataCallback] Parent context module check: ietf-routing@2018-03-13 = %p, ietf-interfaces@2018-02-20 = %p\n",
+          (void*)routing_mod, (void*)interfaces_mod);
+  if (!routing_mod || !interfaces_mod) {
+    fprintf(stderr, "[extDataCallback] ERROR: shared-schema requires modules to exist in parent context!\n");
+    free(parent_path);
+    return LY_EINVAL;
+  }
+  
   // Build ext-data XML with correct label (matches sysrepo structure)
+  // NOTE: Must include BOTH new (datastore/schema/module-set) AND deprecated (modules-state)
+  // formats. Even though modules-state is deprecated in RFC 8525 (2019-01-04), it's still
+  // in the schema with mandatory module-set-id child. Validation fails without it.
+  // The schema-mount plugin should use the new structure and ignore the deprecated part.
+  // Added datastore element per RFC 8525 - links running datastore to schema.
+  // Element ordering follows RFC 8525: module-set, schema, datastore, content-id.
   std::string ext_xml = std::string(
     R"(<?xml version="1.0" encoding="UTF-8"?>)"
-    R"(<yang-library xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-library">)"
-    R"(<content-id>1</content-id>)"
+    R"(<yang-library xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-library" xmlns:ds="urn:ietf:params:xml:ns:yang:ietf-datastores">)"
     R"(<module-set>)"
     R"(<name>vrf-modules</name>)"
     R"(<module>)"
@@ -295,6 +312,11 @@ LY_ERR IetfNetworkInstances::extDataCallback(const struct lysc_ext_instance *ext
     R"(<name>vrf-schema</name>)"
     R"(<module-set>vrf-modules</module-set>)"
     R"(</schema>)"
+    R"(<datastore>)"
+    R"(<name>ds:running</name>)"
+    R"(<schema>vrf-schema</schema>)"
+    R"(</datastore>)"
+    R"(<content-id>1</content-id>)"
     R"(</yang-library>)"
     R"(<modules-state xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-library">)"
     R"(<module-set-id>1</module-set-id>)"
@@ -340,6 +362,22 @@ LY_ERR IetfNetworkInstances::extDataCallback(const struct lysc_ext_instance *ext
   }
 
   fprintf(stderr, "[extDataCallback] Validation successful, returning ext_data\n");
+  
+  // CRITICAL DEBUG: Test if lyd_find_path can find yang-library in our parsed tree
+  // This is EXACTLY what the schema-mount plugin does (schema_mount.c:383-384)
+  struct lyd_node *test_find = nullptr;
+  LY_ERR find_rc = lyd_find_path(parsed, "/ietf-yang-library:yang-library", 0, &test_find);
+  fprintf(stderr, "[extDataCallback] TEST: lyd_find_path(parsed, \"/ietf-yang-library:yang-library\", ...) returned %d\n", find_rc);
+  if (find_rc == LY_SUCCESS) {
+    fprintf(stderr, "[extDataCallback] TEST: SUCCESS - found yang-library node at %p\n", (void*)test_find);
+    if (test_find && test_find->schema) {
+      fprintf(stderr, "[extDataCallback] TEST: Node name = '%s', module = '%s'\n", 
+              test_find->schema->name, test_find->schema->module->name);
+    }
+  } else {
+    fprintf(stderr, "[extDataCallback] TEST: FAILED - lyd_find_path could not find yang-library (rc=%d)\n", find_rc);
+    fprintf(stderr, "[extDataCallback] TEST: This is why the plugin fails! The path lookup doesn't work on our tree structure.\n");
+  }
   
   // Print the parsed data tree before returning
   fprintf(stderr, "[extDataCallback] Parsed ext_data tree:\n");
