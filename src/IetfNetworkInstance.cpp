@@ -197,110 +197,158 @@ IetfNetworkInstances::deserialize(const YangContext &ctx,
  * list of supported known YANG statements with the pointer to their compiled data (sized array) 
  */
 LY_ERR IetfNetworkInstances::extDataCallback(const struct lysc_ext_instance *ext,
-                                              [[maybe_unused]] const struct lyd_node *node,
+                                              const struct lyd_node *node,
                                               [[maybe_unused]] void *user_data,
                                               void **ext_data,
                                               ly_bool *free_ext_data) {
-  // This callback provides mount-point metadata (yang-library + schema-mounts) to libyang
-  // when it encounters a mount point (vrf-root/vsi-root/vv-root) during validation/parsing.
-  // 
-  // The instance data contains ONLY the mounted data (e.g., routing config).
-  // This callback returns SEPARATE yang-library and schema-mounts trees that describe:
-  // - Which modules are available in the mounted schema (yang-library)
-  // - How the mount point is configured (schema-mounts with shared-schema)
+  // Recursion guard (matches common.c pattern)
+  static thread_local int mount_cb_r = 0;
   
-  if (!ext_data || !free_ext_data) {
-    fprintf(stderr, "YangError: IetfNetworkInstances::extDataCallback invalid ext_data/free_ext_data pointers\n");
-    return LY_EINVAL;
-  }
-
+  fprintf(stderr, "[extDataCallback] Called (node=%p, mount_cb_r=%d)\n", (void*)node, mount_cb_r);
+  
   *ext_data = nullptr;
   *free_ext_data = 0;
 
-  if (!node) {
-    fprintf(stderr, "YangError: IetfNetworkInstances::extDataCallback called with null node\n");
+  // Check for recursive call
+  if (mount_cb_r) {
+    fprintf(stderr, "[extDataCallback] Recursive call detected, returning LY_SUCCESS\n");
+    return LY_SUCCESS;
+  }
+
+  // Validate this is a mount-point extension (matches common.c check)
+  if (!ext || !ext->def || !ext->def->module || !ext->def->module->name ||
+      strcmp(ext->def->module->name, "ietf-yang-schema-mount") != 0 ||
+      !ext->def->name || strcmp(ext->def->name, "mount-point") != 0) {
+    fprintf(stderr, "[extDataCallback] Not a mount-point extension, returning LY_EINVAL\n");
     return LY_EINVAL;
   }
 
-  struct ly_ctx *ctx = (struct ly_ctx *)LYD_CTX(node);
+  fprintf(stderr, "[extDataCallback] Valid mount-point extension (module=%s, name=%s)\n", 
+          ext->def->module->name, ext->def->name);
 
-  const char *label_name = nullptr;
-  if (node->schema && node->schema->name)
-    label_name = node->schema->name;
-  if (!label_name) {
-    fprintf(stderr, "YangError: IetfNetworkInstances::extDataCallback missing label_name\n");
-    return LY_EINVAL;
+  // Compute parent path (matches common.c logic)
+  char *parent_path = nullptr;
+  if (node) {
+    // Parsing data, use the data node
+    parent_path = lyd_path(node, LYD_PATH_STD, NULL, 0);
+    fprintf(stderr, "[extDataCallback] Using data node path\n");
+  } else {
+    // Creating shared contexts, use the ext schema parent node
+    if (ext->parent_stmt != LY_STMT_CONTAINER && ext->parent_stmt != LY_STMT_LIST) {
+      fprintf(stderr, "[extDataCallback] Invalid parent_stmt type, returning LY_EINVAL\n");
+      return LY_EINVAL;
+    }
+    parent_path = lysc_path((const struct lysc_node *)ext->parent, LYSC_PATH_DATA, NULL, 0);
+    fprintf(stderr, "[extDataCallback] Using schema parent path\n");
+  }
+  if (!parent_path) {
+    fprintf(stderr, "[extDataCallback] Failed to get parent_path, returning LY_EMEM\n");
+    return LY_EMEM;
   }
 
-  // Build ext-data XML with BOTH modern yang-library AND deprecated modules-state (with module-set-id)
-  // This provides metadata about the mounted schema (ietf-routing, ietf-interfaces) and
-  // tells libyang to use shared-schema (parent context) for resolution
+  fprintf(stderr, "[extDataCallback] parent_path = %s\n", parent_path);
+
+  // Extract label from parent_path (last component is the mount label)
+  const char *label_name = strrchr(parent_path, '/');
+  if (label_name) {
+    label_name++; // skip the '/'
+  } else {
+    label_name = parent_path;
+  }
+  
+  // Remove any predicates from label
+  std::string label(label_name);
+  size_t pred_pos = label.find('[');
+  if (pred_pos != std::string::npos) {
+    label = label.substr(0, pred_pos);
+  }
+  
+  // Remove namespace prefix if present (label must be local name only)
+  size_t colon_pos = label.find(':');
+  if (colon_pos != std::string::npos) {
+    label = label.substr(colon_pos + 1);
+  }
+
+  fprintf(stderr, "[extDataCallback] Extracted label = '%s'\n", label.c_str());
+
+  struct ly_ctx *ctx = ext->module->ctx;
+  
+  // Build ext-data XML with correct label (matches sysrepo structure)
   std::string ext_xml = std::string(
     R"(<?xml version="1.0" encoding="UTF-8"?>)"
-    R"(  <yang-library xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-library">)"
-    R"(    <content-id>1</content-id>)"
-    R"(    <module-set>)"
-    R"(      <name>vrf-modules</name>)"
-    R"(      <module>)"
-    R"(        <name>ietf-routing</name>)"
-    R"(        <revision>2018-03-13</revision>)"
-    R"(        <namespace>urn:ietf:params:xml:ns:yang:ietf-routing</namespace>)"
-    R"(      </module>)"
-    R"(      <module>)"
-    R"(        <name>ietf-interfaces</name>)"
-    R"(        <revision>2018-02-20</revision>)"
-    R"(        <namespace>urn:ietf:params:xml:ns:yang:ietf-interfaces</namespace>)"
-    R"(      </module>)"
-    R"(    </module-set>)"
-    R"(    <schema>)"
-    R"(      <name>vrf-schema</name>)"
-    R"(      <module-set>vrf-modules</module-set>)"
-    R"(    </schema>)"
-    R"(  </yang-library>)"
-    R"(  <modules-state xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-library">)"
-    R"(    <module-set-id>1</module-set-id>)"
-    R"(  </modules-state>)"
-    R"(  <schema-mounts xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-schema-mount">)"
-    R"(    <mount-point>)"
-    R"(      <module>ietf-network-instance</module>)"
-    R"(      <label>shitcock</label>)"
-    R"(      <shared-schema/>)"
-    R"(    </mount-point>)"
-    R"(  </schema-mounts>)");
-
-  fprintf(stderr, "ext_data (preparsed XML):\n%s\n", ext_xml.c_str());
+    R"(<yang-library xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-library">)"
+    R"(<content-id>1</content-id>)"
+    R"(<module-set>)"
+    R"(<name>vrf-modules</name>)"
+    R"(<module>)"
+    R"(<name>ietf-routing</name>)"
+    R"(<revision>2018-03-13</revision>)"
+    R"(<namespace>urn:ietf:params:xml:ns:yang:ietf-routing</namespace>)"
+    R"(</module>)"
+    R"(<module>)"
+    R"(<name>ietf-interfaces</name>)"
+    R"(<revision>2018-02-20</revision>)"
+    R"(<namespace>urn:ietf:params:xml:ns:yang:ietf-interfaces</namespace>)"
+    R"(</module>)"
+    R"(</module-set>)"
+    R"(<schema>)"
+    R"(<name>vrf-schema</name>)"
+    R"(<module-set>vrf-modules</module-set>)"
+    R"(</schema>)"
+    R"(</yang-library>)"
+    R"(<modules-state xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-library">)"
+    R"(<module-set-id>1</module-set-id>)"
+    R"(</modules-state>)"
+    R"(<schema-mounts xmlns="urn:ietf:params:xml:ns:yang:ietf-yang-schema-mount">)"
+    R"(<mount-point>)"
+    R"(<module>ietf-network-instance</module>)"
+    R"(<label>)" + label + R"(</label>)"
+    R"(<shared-schema/>)"
+    R"(</mount-point>)"
+    R"(</schema-mounts>)");
 
   struct lyd_node *parsed = nullptr;
-  /* parse as a single XML document (no OPAQ flag), then validate */
-  if (lyd_parse_data_mem(ctx, ext_xml.c_str(), LYD_XML, LYD_PARSE_ONLY, 0, &parsed) != LY_SUCCESS) {
+  
+  fprintf(stderr, "[extDataCallback] Parsing ext-data XML (length=%zu)\n", ext_xml.length());
+  
+  // Set recursion guard before parsing
+  mount_cb_r = 1;
+  LY_ERR rc = lyd_parse_data_mem(ctx, ext_xml.c_str(), LYD_XML, LYD_PARSE_ONLY, 0, &parsed);
+  mount_cb_r = 0;
+  
+  if (rc != LY_SUCCESS) {
+    fprintf(stderr, "[extDataCallback] Parse failed with rc=%d\n", rc);
+    free(parent_path);
     if (parsed) {
-      char *printed = nullptr;
-      lyd_print_mem(&printed, parsed, LYD_XML, 0);
-      fprintf(stderr, "ext_data parse produced partial tree:\n%s\n", printed);
       lyd_free_all(parsed);
     }
-    fprintf(stderr, "YangError: IetfNetworkInstances::extDataCallback failed to parse ext_xml\n");
     return LY_EINVAL;
   }
-  
-  char *printed = nullptr;
-  lyd_print_mem(&printed, parsed, LYD_XML, 0);
-  fprintf(stderr, "ext_data (after parse XML):\n%s\n", printed);
 
-  if (lyd_validate_all(&parsed, nullptr, LYD_VALIDATE_PRESENT, nullptr) != LY_SUCCESS) {
-    char *printed = nullptr;
-    lyd_print_mem(&printed, parsed, LYD_XML, 0);
-    fprintf(stderr, "ext_data validation failed; parsed ext_data:\n%s\n", printed);
+  fprintf(stderr, "[extDataCallback] Parse successful, validating...\n");
+
+  // Validate the parsed data
+  mount_cb_r = 1;
+  rc = lyd_validate_all(&parsed, nullptr, LYD_VALIDATE_PRESENT, nullptr);
+  mount_cb_r = 0;
+  
+  if (rc != LY_SUCCESS) {
+    fprintf(stderr, "[extDataCallback] Validation failed with rc=%d\n", rc);
+    free(parent_path);
     lyd_free_all(parsed);
-    fprintf(stderr, "YangError: IetfNetworkInstances::extDataCallback lyd_validate_all failed\n");
     return LY_EVALID;
   }
+
+  fprintf(stderr, "[extDataCallback] Validation successful, returning ext_data\n");
   
-  lyd_print_mem(&printed, parsed, LYD_XML, 0);
-  fprintf(stderr, "ext_data (pretty parsed/validated XML):\n%s\n", printed);
-        
+  // Print the parsed data tree before returning
+  fprintf(stderr, "[extDataCallback] Parsed ext_data tree:\n");
+  lyd_print_file(stderr, parsed, LYD_XML, LYD_PRINT_SIBLINGS);
+  fprintf(stderr, "\n[extDataCallback] End of parsed tree\n");
 
   *ext_data = parsed;
-  *free_ext_data = 0; // stop changing this to 1 
+  *free_ext_data = 1;  // Match common.c: libyang will free the data
+  
+  free(parent_path);
   return LY_SUCCESS;
 }
